@@ -1,0 +1,959 @@
+const express = require('express');
+const http = require('http');
+const path = require('path');
+const { Server } = require('socket.io');
+const Database = require('better-sqlite3');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+const db = new Database('dispatch.db');
+
+// Financials & Bidding Schema
+try {
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS job_bids (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bookingId INTEGER,
+      driverId TEXT,
+      driverName TEXT,
+      bidEtaMinutes INTEGER,
+      status TEXT DEFAULT 'pending',
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+  const bookingCols = db.prepare("PRAGMA table_info(bookings)").all().map(c => c.name);
+  if (!bookingCols.includes('paymentType')) {
+    db.prepare("ALTER TABLE bookings ADD COLUMN paymentType TEXT DEFAULT 'CASH'").run();
+  }
+} catch (e) {
+  console.log("Schema note:", e.message);
+}
+
+
+// COMPREHENSIVE SCHEMAS WITH TENANCY & COMPLIANCE
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tariffs (
+    id INTEGER PRIMARY KEY,
+    tenantId TEXT DEFAULT 'MD-BATH',
+    hubPostcodePrefix TEXT DEFAULT 'BA',
+    freeWaitMins INTEGER DEFAULT 5,
+    waitingRatePerMin REAL DEFAULT 0.35,
+    viaStopFee REAL DEFAULT 5.00,
+    petSurcharge REAL DEFAULT 6.00,
+    offerTimeoutSeconds INTEGER DEFAULT 15,
+    companyCommissionPct REAL DEFAULT 20.0,
+    defaultLocalPricingMode TEXT DEFAULT 'dynamic',
+    busySurgePct REAL DEFAULT 0.0,
+    
+    meterBaseFare REAL DEFAULT 3.50,
+    meterDistancePulseYard INTEGER DEFAULT 176,
+    meterDistancePulseCost REAL DEFAULT 0.20,
+    meterTimePulseSeconds INTEGER DEFAULT 45,
+    meterTimePulseCost REAL DEFAULT 0.20,
+
+    meterEstatePct REAL DEFAULT 10.0,
+    meterMpvPct REAL DEFAULT 40.0,
+    meterMinibus7Pct REAL DEFAULT 60.0,
+    meterMinibus8Pct REAL DEFAULT 60.0,
+    meterExecPct REAL DEFAULT 70.0,
+
+    baseFlagDrop REAL DEFAULT 5.00,
+    firstMileRate REAL DEFAULT 2.00,
+    tier1PerMile REAL DEFAULT 2.00,
+    tier2PerMile REAL DEFAULT 1.80,
+    tier3PerMile REAL DEFAULT 1.50,
+
+    estatePercent REAL DEFAULT 0.10,
+    mpvPercent REAL DEFAULT 0.40,
+    minibus7Percent REAL DEFAULT 0.60,
+    minibus8Percent REAL DEFAULT 0.60,
+    execPercent REAL DEFAULT 0.70,
+
+    airportEstatePercent REAL DEFAULT 0.10,
+    airportMpvPercent REAL DEFAULT 0.45,
+    airportMinibus7Percent REAL DEFAULT 0.60,
+    airportMinibus8Percent REAL DEFAULT 0.60,
+    airportExecPercent REAL DEFAULT 0.70
+  );
+
+  CREATE TABLE IF NOT EXISTS corporate_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenantId TEXT DEFAULT 'MD-BATH',
+    accountNumber TEXT UNIQUE NOT NULL,
+    companyName TEXT NOT NULL,
+    discountPct REAL DEFAULT 0.0,
+    paymentTerms TEXT DEFAULT '30 Days Net',
+    billingEmail TEXT DEFAULT '',
+    billingAddress TEXT DEFAULT ''
+  );
+
+  CREATE TABLE IF NOT EXISTS airport_matrix (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenantId TEXT DEFAULT 'MD-BATH',
+    name TEXT NOT NULL,
+    iataCode TEXT,
+    keywords TEXT,
+    baseRate REAL NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS drivers (
+    driverId TEXT PRIMARY KEY,
+    tenantId TEXT DEFAULT 'MD-BATH',
+    name TEXT,
+    pin TEXT,
+    vehicle TEXT,
+    vehicleClass TEXT DEFAULT 'Saloon',
+    maxPax INTEGER DEFAULT 4,
+    phone TEXT,
+    acceptsPets INTEGER DEFAULT 1,
+    customCommissionPct REAL DEFAULT 20.0,
+    status TEXT DEFAULT 'Offline',
+    badgeExpiry TEXT DEFAULT '2027-12-31',
+    motExpiry TEXT DEFAULT '2027-10-15',
+    insuranceExpiry TEXT DEFAULT '2027-11-01'
+  );
+
+  CREATE TABLE IF NOT EXISTS bookings (
+    id TEXT PRIMARY KEY,
+    tenantId TEXT DEFAULT 'MD-BATH',
+    passenger TEXT,
+    phone TEXT,
+    pickup TEXT,
+    vias TEXT DEFAULT '[]',
+    dropoff TEXT,
+    bookingType TEXT DEFAULT 'Immediate',
+    pickupDateTime TEXT DEFAULT NULL,
+    passengers INTEGER DEFAULT 1,
+    vehicleClass TEXT DEFAULT 'ANY',
+    strictVehicle INTEGER DEFAULT 0,
+    hasPet INTEGER DEFAULT 0,
+    petType TEXT DEFAULT 'None',
+    petFee REAL DEFAULT 0.0,
+    pricingType TEXT,
+    paymentMethod TEXT DEFAULT 'Cash',
+    accountNumber TEXT DEFAULT NULL,
+    customerNotes TEXT DEFAULT NULL,
+    fare REAL,
+    assignedDriverId TEXT,
+    attemptedDrivers TEXT DEFAULT '[]',
+    dispatchAuditLog TEXT DEFAULT '[]',
+    dispatchedAt TEXT DEFAULT NULL,
+    acceptedAt TEXT DEFAULT NULL,
+    arrivedAt TEXT DEFAULT NULL,
+    pobAt TEXT DEFAULT NULL,
+    completedAt TEXT DEFAULT NULL,
+    status TEXT,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS plots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenantId TEXT DEFAULT 'MD-BATH',
+    name TEXT NOT NULL,
+    code TEXT,
+    postcodeSector TEXT,
+    plotType TEXT DEFAULT 'stand',
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    radiusMeters INTEGER DEFAULT 350
+  );
+
+  CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenantId TEXT DEFAULT 'MD-BATH',
+    sender TEXT NOT NULL,
+    targetDriverId TEXT DEFAULT 'ALL',
+    text TEXT NOT NULL,
+    timestamp TEXT NOT NULL
+  );
+`);
+
+// MIGRATIONS
+const cols = [
+  "ALTER TABLE tariffs ADD COLUMN tenantId TEXT DEFAULT 'MD-BATH'",
+  "ALTER TABLE corporate_accounts ADD COLUMN tenantId TEXT DEFAULT 'MD-BATH'",
+  "ALTER TABLE corporate_accounts ADD COLUMN billingEmail TEXT DEFAULT ''",
+  "ALTER TABLE corporate_accounts ADD COLUMN billingAddress TEXT DEFAULT ''",
+  "ALTER TABLE airport_matrix ADD COLUMN tenantId TEXT DEFAULT 'MD-BATH'",
+  "ALTER TABLE drivers ADD COLUMN tenantId TEXT DEFAULT 'MD-BATH'",
+  "ALTER TABLE drivers ADD COLUMN badgeExpiry TEXT DEFAULT '2027-12-31'",
+  "ALTER TABLE drivers ADD COLUMN motExpiry TEXT DEFAULT '2027-10-15'",
+  "ALTER TABLE drivers ADD COLUMN insuranceExpiry TEXT DEFAULT '2027-11-01'",
+  "ALTER TABLE bookings ADD COLUMN tenantId TEXT DEFAULT 'MD-BATH'",
+  "ALTER TABLE plots ADD COLUMN tenantId TEXT DEFAULT 'MD-BATH'",
+  "ALTER TABLE messages ADD COLUMN tenantId TEXT DEFAULT 'MD-BATH'"
+];
+cols.forEach(sql => { try { db.exec(sql); } catch(e) {} });
+
+// INITIAL SEEDING
+if (db.prepare('SELECT COUNT(*) as c FROM tariffs').get().c === 0) {
+  db.prepare(`
+    INSERT INTO tariffs (id, tenantId, meterBaseFare, busySurgePct, baseFlagDrop, firstMileRate, tier1PerMile, tier2PerMile, tier3PerMile)
+    VALUES (1, 'MD-BATH', 3.50, 0.0, 5.00, 2.00, 2.00, 1.80, 1.50)
+  `).run();
+}
+if (db.prepare('SELECT COUNT(*) as c FROM drivers').get().c === 0) {
+  db.prepare(`
+    INSERT INTO drivers (driverId, tenantId, name, pin, vehicle, vehicleClass, maxPax, phone, badgeExpiry, motExpiry, insuranceExpiry)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run('UKUND', 'MD-BATH', 'Mukund Desai', '1234', 'Hyundai i800', 'Minibus_8', 8, '07795681747', '2027-12-31', '2027-10-15', '2027-11-01');
+}
+if (db.prepare('SELECT COUNT(*) as c FROM plots').get().c === 0) {
+  db.prepare('INSERT INTO plots (name, code, postcodeSector, plotType, lat, lng, radiusMeters, tenantId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run('Bath Spa Station Stand', 'STAND-SPA', 'BA1 1', 'stand', 51.3776, -2.3571, 350, 'MD-BATH');
+}
+if (db.prepare('SELECT COUNT(*) as c FROM airport_matrix').get().c === 0) {
+  db.prepare('INSERT INTO airport_matrix (name, iataCode, keywords, baseRate, tenantId) VALUES (?, ?, ?, ?, ?)').run('Bristol Airport', 'BRS', 'bristol, lulsgate', 48.00, 'MD-BATH');
+  db.prepare('INSERT INTO airport_matrix (name, iataCode, keywords, baseRate, tenantId) VALUES (?, ?, ?, ?, ?)').run('Heathrow Airport', 'LHR', 'heathrow, lhr', 140.00, 'MD-BATH');
+}
+
+const plotQueues = {};
+function initQueues() {
+  db.prepare('SELECT id FROM plots').all().forEach(p => { if (!plotQueues[p.id]) plotQueues[p.id] = []; });
+}
+initQueues();
+
+function getDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371e3;
+  const phi1 = (parseFloat(lat1) * Math.PI) / 180;
+  const phi2 = (parseFloat(lat2) * Math.PI) / 180;
+  const deltaPhi = ((parseFloat(lat2) - parseFloat(lat1)) * Math.PI) / 180;
+  const deltaLambda = ((parseFloat(lon2) - parseFloat(lon1)) * Math.PI) / 180;
+  const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) + Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function updateDriverPlotPosition(driverId, lat, lng, driverStatus) {
+  const allPlots = db.prepare('SELECT * FROM plots').all();
+  let matchedPlot = null;
+  let driverRank = null;
+  let closestDist = Infinity;
+  const numLat = parseFloat(lat);
+  const numLng = parseFloat(lng);
+
+  for (let p of allPlots) {
+    const dist = getDistanceMeters(numLat, numLng, p.lat, p.lng);
+    if (dist <= (p.radiusMeters || 350) && dist < closestDist) {
+      closestDist = dist;
+      matchedPlot = p;
+    }
+  }
+
+  allPlots.forEach(p => {
+    if (!plotQueues[p.id]) plotQueues[p.id] = [];
+    const isInThisPlot = matchedPlot && (matchedPlot.id === p.id);
+    const existingIndex = plotQueues[p.id].findIndex(x => x.driverId.toUpperCase() === driverId.toUpperCase());
+    if (isInThisPlot && driverStatus === 'Available') {
+      if (existingIndex === -1) plotQueues[p.id].push({ driverId: driverId.toUpperCase(), enteredAt: Date.now() });
+    } else {
+      if (existingIndex !== -1) plotQueues[p.id].splice(existingIndex, 1);
+    }
+  });
+
+  if (matchedPlot) {
+    const qIndex = (plotQueues[matchedPlot.id] || []).findIndex(x => x.driverId.toUpperCase() === driverId.toUpperCase());
+    driverRank = (qIndex !== -1 && driverStatus === "Available") ? qIndex + 1 : null;
+  }
+  return { matchedPlot, driverRank };
+}
+
+const connectedDrivers = {};
+const activeOfferTimers = {};
+
+function getTariff(tenantId = 'MD-BATH') {
+  return db.prepare('SELECT * FROM tariffs WHERE tenantId = ? LIMIT 1').get(tenantId) || db.prepare('SELECT * FROM tariffs LIMIT 1').get() || {};
+}
+function getAirports(tenantId = 'MD-BATH') {
+  return db.prepare('SELECT * FROM airport_matrix WHERE tenantId = ? ORDER BY id ASC').all(tenantId);
+}
+function getAccounts(tenantId = 'MD-BATH') {
+  return db.prepare('SELECT * FROM corporate_accounts WHERE tenantId = ? ORDER BY id DESC').all(tenantId);
+}
+function getAllJobs(tenantId = 'MD-BATH') {
+  return db.prepare('SELECT * FROM bookings WHERE tenantId = ? ORDER BY createdAt DESC LIMIT 250').all(tenantId);
+}
+function getPlots(tenantId = 'MD-BATH') {
+  return db.prepare('SELECT * FROM plots WHERE tenantId = ? ORDER BY id ASC').all(tenantId).map(p => ({
+    ...p,
+    queueCount: (plotQueues[p.id] || []).length,
+    queue: (plotQueues[p.id] || []).map((q, idx) => ({ ...q, rank: idx + 1 }))
+  }));
+}
+function getAllDrivers(tenantId = 'MD-BATH') {
+  return db.prepare('SELECT * FROM drivers WHERE tenantId = ?').all(tenantId).map(d => {
+    const active = Object.values(connectedDrivers).find(c => c.driverId.toUpperCase() === d.driverId.toUpperCase());
+    return {
+      ...d,
+      isOnline: !!active,
+      status: active ? active.status : 'Offline',
+      currentPlotName: active ? (active.currentPlotName || 'Larkhall') : 'Larkhall',
+      plotRank: active ? active.plotRank : 1,
+      lat: active ? active.lat : 51.3776,
+      lng: active ? active.lng : -2.3571
+    };
+  });
+}
+
+function appendAudit(jobId, action, note) {
+  try {
+    const job = db.prepare('SELECT dispatchAuditLog FROM bookings WHERE id = ?').get(jobId);
+    if (!job) return;
+    let log = [];
+    try { log = JSON.parse(job.dispatchAuditLog || '[]'); } catch(e){}
+    log.push({ action, note, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) });
+    db.prepare('UPDATE bookings SET dispatchAuditLog = ? WHERE id = ?').run(JSON.stringify(log), jobId);
+  } catch(e){}
+}
+
+function routeJobCascade(jobId) {
+  clearTimeout(activeOfferTimers[jobId]);
+  const job = db.prepare('SELECT * FROM bookings WHERE id = ?').get(jobId);
+  if (!job || job.status === 'Accepted' || job.status === 'Completed' || job.status === 'Cancelled') return;
+
+  const attempted = JSON.parse(job.attemptedDrivers || '[]');
+  const onlineDrivers = Object.values(connectedDrivers).filter(d => d.status === 'Available');
+
+  const nextDriver = onlineDrivers.find(d => {
+    if (attempted.includes(d.driverId.toUpperCase())) return false;
+    if (d.maxPax < job.passengers) return false;
+    if (job.vehicleClass === 'LOW_CAR' && d.vehicleClass !== 'Saloon' && d.vehicleClass !== 'Estate') return false;
+    if (job.vehicleClass !== 'ANY' && job.strictVehicle && d.vehicleClass !== job.vehicleClass) return false;
+    if (job.hasPet && !job.isGuideDog && !d.acceptsPets) return false;
+    return true;
+  });
+
+  if (nextDriver) {
+    attempted.push(nextDriver.driverId.toUpperCase());
+    db.prepare("UPDATE bookings SET assignedDriverId = ?, status = 'Offered', attemptedDrivers = ? WHERE id = ?").run(nextDriver.driverId.toUpperCase(), JSON.stringify(attempted), job.id);
+    appendAudit(job.id, 'OFFERED', `Offered to ${nextDriver.driverId}`);
+
+    job.assignedDriverId = nextDriver.driverId.toUpperCase();
+    job.status = 'Offered';
+    
+    if (nextDriver.socketId) io.to(nextDriver.socketId).emit('job_offer', job);
+    io.to(`room_${nextDriver.driverId.toUpperCase()}`).emit('job_offer', job);
+    io.emit('update_jobs_list', getAllJobs(job.tenantId));
+
+    const tariff = getTariff(job.tenantId);
+    const timeoutSec = (parseInt(tariff.offerTimeoutSeconds) || 15) * 1000;
+    activeOfferTimers[job.id] = setTimeout(() => routeJobCascade(job.id), timeoutSec);
+  } else {
+    db.prepare("UPDATE bookings SET assignedDriverId = 'UNASSIGNED', status = 'Open For Bidding' WHERE id = ?").run(job.id);
+    appendAudit(job.id, 'BID_BOARD', 'Cascade finished. Placed on Open Bid Board');
+    job.assignedDriverId = 'UNASSIGNED';
+    job.status = 'Open For Bidding';
+    io.emit('open_job_for_bidding', job);
+    io.emit('update_jobs_list', getAllJobs(job.tenantId));
+  }
+}
+
+// REST ENDPOINT FOR PASSENGER LIVE TRACKING PAGE
+app.get('/api/track/:jobId', (req, res) => {
+  const jobId = (req.params.jobId || '').toUpperCase().trim();
+  const job = db.prepare('SELECT * FROM bookings WHERE UPPER(id) = ?').get(jobId);
+  if (!job) return res.status(404).json({ error: 'Trip not found' });
+
+  let driver = null;
+  if (job.assignedDriverId && job.assignedDriverId !== 'UNASSIGNED') {
+    const dRec = db.prepare('SELECT driverId, name, vehicle, vehicleClass, phone FROM drivers WHERE UPPER(driverId) = ?').get(job.assignedDriverId);
+    const active = Object.values(connectedDrivers).find(c => c.driverId.toUpperCase() === job.assignedDriverId.toUpperCase());
+    driver = {
+      ...dRec,
+      lat: active ? active.lat : 51.3776,
+      lng: active ? active.lng : -2.3571,
+      isOnline: !!active
+    };
+  }
+
+  res.json({ job, driver });
+});
+
+let clientTenant = 'MD-BATH';
+
+io.on('connection', (socket) => {
+  let clientTenant = 'MD-BATH';
+
+  // Helper to send complete state to an admin socket
+  // Helper to merge live in-memory driver status with DB records
+  function getMergedDrivers(tenant) {
+    const dbDrivers = db.prepare("SELECT * FROM drivers WHERE tenantId = ? OR tenantId IS NULL").all(tenant);
+    return dbDrivers.map(d => {
+      const live = Object.values(connectedDrivers).find(cd => cd.driverId && cd.driverId.toUpperCase() === d.driverId.toUpperCase());
+      if (live) {
+        return {
+          ...d,
+          status: live.status || 'Available',
+          currentPlotName: live.currentPlotName || d.currentPlotName || 'Larkhall',
+          activeJobId: live.activeJobId || null
+        };
+      }
+      return d;
+    });
+  }
+
+  // Helper to send snapshot of everything to admin socket
+  function sendAdminState(targetSocket) {
+    const s = targetSocket || socket;
+    try {
+      const activeTariff = getTariff(clientTenant);
+      const allDrivers = getMergedDrivers(clientTenant);
+      const allPlots = db.prepare("SELECT * FROM plots WHERE tenantId = ? OR tenantId IS NULL").all(clientTenant);
+      const allAirports = db.prepare("SELECT * FROM airports WHERE tenantId = ? OR tenantId IS NULL").all(clientTenant);
+      const allAccounts = db.prepare("SELECT * FROM accounts WHERE tenantId = ? OR tenantId IS NULL").all(clientTenant);
+      const allJobs = getAllJobs(clientTenant);
+
+      // Main full bundle
+      s.emit('init_data', {
+        jobs: allJobs,
+        drivers: allDrivers,
+        plots: allPlots,
+        tariff: activeTariff,
+        airports: allAirports,
+        accounts: allAccounts
+      });
+
+      // Individual tab listeners that admin.html specifically binds to
+      s.emit('update_tariff', activeTariff);
+      s.emit('update_driver_list', allDrivers);
+      s.emit('update_jobs_list', allJobs);
+      s.emit('update_bookings', allJobs);
+      s.emit('update_airports', allAirports);
+      s.emit('update_plots', allPlots);
+      s.emit('update_accounts', allAccounts);
+    } catch (err) {
+      console.error('Error in sendAdminState:', err.message);
+    }
+  }
+
+  function broadcastAdminState() {
+    try {
+      const activeTariff = getTariff(clientTenant);
+      const allDrivers = getMergedDrivers(clientTenant);
+      const allPlots = db.prepare("SELECT * FROM plots WHERE tenantId = ? OR tenantId IS NULL").all(clientTenant);
+      const allAirports = db.prepare("SELECT * FROM airports WHERE tenantId = ? OR tenantId IS NULL").all(clientTenant);
+      const allAccounts = db.prepare("SELECT * FROM accounts WHERE tenantId = ? OR tenantId IS NULL").all(clientTenant);
+      const allJobs = getAllJobs(clientTenant);
+
+      io.emit('init_data', {
+        jobs: allJobs,
+        drivers: allDrivers,
+        plots: allPlots,
+        tariff: activeTariff,
+        airports: allAirports,
+        accounts: allAccounts
+      });
+
+      io.emit('update_tariff', activeTariff);
+      io.emit('update_driver_list', allDrivers);
+      io.emit('update_jobs_list', allJobs);
+      io.emit('update_bookings', allJobs);
+      io.emit('update_airports', allAirports);
+      io.emit('update_plots', allPlots);
+      io.emit('update_accounts', allAccounts);
+    } catch (err) {
+      console.error('Error in broadcastAdminState:', err.message);
+    }
+  }
+
+  // 1. ADMIN INIT & REFRESH REQUESTS
+  socket.on('admin_init', () => sendAdminState(socket));
+  socket.on('request_state', () => sendAdminState(socket));
+  socket.on('get_all_data', () => sendAdminState(socket));
+  socket.on('set_tenant', (tenant) => {
+    clientTenant = tenant || 'MD-BATH';
+    sendAdminState(socket);
+  });
+
+  // 2. MASTER TARIFF UPDATE WITH COLUMN VALIDATION
+  socket.on('update_system_tariff', (data) => {
+    try {
+      const tariffCols = db.prepare("PRAGMA table_info(tariffs)").all().map(c => c.name);
+      const t = getTariff(clientTenant);
+      
+      const validKeys = Object.keys(data).filter(k => tariffCols.includes(k) && k !== 'id' && k !== 'tenantId');
+      if (validKeys.length > 0) {
+        const setClauses = validKeys.map(k => `${k} = ?`).join(', ');
+        const values = validKeys.map(k => data[k]);
+        values.push(t.id || 1);
+        db.prepare(`UPDATE tariffs SET ${setClauses} WHERE id = ?`).run(...values);
+        console.log(`✅ Master Tariff updated: ${validKeys.length} settings saved.`);
+      }
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error in update_system_tariff:', err.message);
+    }
+  });
+
+  // 3. AIRPORT MANAGEMENT (ADD / DELETE)
+  socket.on('admin_add_airport', (data) => {
+    try {
+      const name = data.name || 'Airport';
+      const iataCode = data.iataCode || '';
+      const keywords = data.keywords || '';
+      const rate = parseFloat(data.baseRate) || parseFloat(data.baseFare) || 0;
+
+      db.prepare(`
+        INSERT INTO airports (tenantId, name, iataCode, keywords, baseRate, baseFare, active)
+        VALUES (?, ?, ?, ?, ?, ?, 1)
+      `).run(clientTenant, name, iataCode, keywords, rate, rate);
+
+      console.log(`✅ Airport added: ${name} (£${rate})`);
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error adding airport:', err.message);
+    }
+  });
+
+  
+  
+
+  // 4. DRIVER MANAGEMENT (ADD / UPDATE / ARCHIVE / DELETE)
+  socket.on('admin_create_driver', (data) => {
+    try {
+      const dId = (data.driverId || '').toUpperCase().trim();
+      if (!dId) return;
+
+      const driverCols = db.prepare("PRAGMA table_info(drivers)").all().map(c => c.name);
+
+      const driverObj = {
+        driverId: dId,
+        name: data.name || 'Driver',
+        phone: data.phone || '',
+        pin: String(data.pin || '1234'),
+        vehicle: data.vehicle || '',
+        vehicleClass: data.vehicleClass || 'Standard',
+        maxPax: parseInt(data.maxPax) || 4,
+        customCommissionPct: parseFloat(data.customCommissionPct) || 20,
+        commissionRate: parseFloat(data.customCommissionPct) || 20,
+        status: 'Offline',
+        accountStatus: 'ACTIVE',
+        tenantId: clientTenant
+      };
+
+      const keys = Object.keys(driverObj).filter(k => driverCols.includes(k));
+      const cols = keys.join(', ');
+      const placeholders = keys.map(() => '?').join(', ');
+      const values = keys.map(k => driverObj[k]);
+
+      db.prepare(`INSERT OR REPLACE INTO drivers (${cols}) VALUES (${placeholders})`).run(...values);
+      console.log(`✅ Fleet Driver saved: ${data.name} (${dId})`);
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error in admin_create_driver:', err.message);
+    }
+  });
+
+  socket.on('admin_delete_driver', (driverId) => {
+    try {
+      db.prepare('DELETE FROM drivers WHERE UPPER(driverId) = UPPER(?)').run(driverId);
+      console.log(`✅ Driver deleted: ${driverId}`);
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error deleting driver:', err.message);
+    }
+  });
+
+  socket.on('admin_archive_driver', (data) => {
+    try {
+      const dId = typeof data === 'object' ? (data.driverId || data.id) : data;
+      db.prepare("UPDATE drivers SET accountStatus = 'ARCHIVED', status = 'Offline' WHERE UPPER(driverId) = UPPER(?)").run(dId);
+      console.log(`✅ Driver archived: ${dId}`);
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error archiving driver:', err.message);
+    }
+  });
+
+  // 5. CORPORATE ACCOUNTS (ADD / DELETE)
+  socket.on('admin_create_account', (data) => {
+    try {
+      const accNum = data.accountNumber || 'ACC-' + Date.now();
+      db.prepare(`
+        INSERT OR REPLACE INTO accounts (tenantId, accountNumber, companyName, contactPerson, email, phone, creditLimit, notes, active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+      `).run(
+        clientTenant,
+        accNum,
+        data.companyName || 'Corporate Client',
+        data.contactPerson || '',
+        data.email || '',
+        data.phone || '',
+        parseFloat(data.creditLimit) || 1000,
+        data.notes || ''
+      );
+      console.log(`✅ Corporate Account saved: ${data.companyName} (${accNum})`);
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error in admin_create_account:', err.message);
+    }
+  });
+
+  socket.on('admin_delete_account', (accId) => {
+    try {
+      db.prepare('DELETE FROM accounts WHERE id = ? OR accountNumber = ?').run(accId, accId);
+      console.log(`✅ Corporate Account deleted: ${accId}`);
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error deleting account:', err.message);
+    }
+  });
+
+  // 6. PLOTS / STANDS (ADD / DELETE)
+  socket.on('admin_add_plot', (data) => {
+    try {
+      const name = data.name || data.plotName || 'Stand';
+      const codeStr = (data.code || '').toUpperCase();
+      const sector = data.postcodeSector || '';
+      const typeStr = data.plotType || 'STAND';
+      const radius = parseInt(data.radiusMeters) || 1000;
+
+      db.prepare(`
+        INSERT INTO plots (tenantId, name, plotName, code, postcodeSector, plotType, radiusMeters, lat, lng)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 51.3776, -2.3571)
+      `).run(clientTenant, name, name, codeStr, sector, typeStr, radius);
+
+      console.log(`✅ Stand/Plot added: ${name}`);
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error adding plot:', err.message);
+    }
+  });
+
+  socket.on('admin_delete_plot', (plotId) => {
+    try {
+      db.prepare('DELETE FROM plots WHERE id = ?').run(plotId);
+      console.log(`✅ Plot deleted: ${plotId}`);
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error deleting plot:', err.message);
+    }
+  });
+
+  // 7. BOOKINGS & DISPATCH ENGINE
+    // 7. BOOKINGS & DISPATCH ENGINE
+  socket.on('create_job', (job) => {
+    try {
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const viasStr = typeof job.vias === 'object' ? JSON.stringify(job.vias) : (job.vias || '');
+
+      const bookingCols = db.prepare("PRAGMA table_info(bookings)").all().map(c => c.name);
+
+      const jobRecord = {
+        tenantId: clientTenant,
+        passenger: job.passenger || job.customer || 'Passenger',
+        phone: job.phone || '',
+        pickup: job.pickup || '-',
+        dropoff: job.dropoff || '-',
+        vias: viasStr,
+        fare: parseFloat(job.fare) || 0,
+        vehicleClass: job.vehicleClass || 'Standard',
+        passengers: parseInt(job.passengers) || parseInt(job.pax) || 1,
+        luggage: parseInt(job.luggage) || 0,
+        paymentMethod: job.paymentMethod || 'Cash',
+        status: job.assignedDriverId ? 'Accepted' : 'Pending',
+        customerNotes: job.customerNotes || job.notes || '',
+        petType: job.petType || 'None',
+        assignedDriverId: job.assignedDriverId || null,
+        createdAt: timeStr
+      };
+
+      // Only insert keys that actually exist in the table
+      const validKeys = Object.keys(jobRecord).filter(k => bookingCols.includes(k));
+      const colsClause = validKeys.join(', ');
+      const placeholders = validKeys.map(() => '?').join(', ');
+      const vals = validKeys.map(k => jobRecord[k]);
+
+      const stmt = db.prepare(`INSERT INTO bookings (${colsClause}) VALUES (${placeholders})`);
+      const res = stmt.run(...vals);
+
+      const newJobId = res.lastInsertRowid;
+      if (typeof appendAudit === 'function') {
+        appendAudit(newJobId, 'CREATED', `Created booking #${newJobId} at ${timeStr}`);
+      }
+
+      console.log(`⚡ Booking #${newJobId} created for ${jobRecord.passenger} (Driver: ${jobRecord.assignedDriverId || 'Unassigned'})`);
+
+            // Alert the assigned driver or broadcast to available drivers
+      if (job.assignedDriverId && String(job.assignedDriverId).toUpperCase() !== 'AUTO') {
+        const targetSid = Object.keys(connectedDrivers).find(sid => {
+          const cd = connectedDrivers[sid];
+          return cd && cd.driverId && cd.driverId.toUpperCase() === String(job.assignedDriverId).toUpperCase();
+        });
+
+        if (targetSid) {
+          const freshJob = db.prepare('SELECT * FROM bookings WHERE id = ?').get(newJobId);
+          io.to(targetSid).emit('job_offer', freshJob);
+          console.log(`📲 Dispatched job offer #${newJobId} directly to driver socket ${targetSid} (${job.assignedDriverId})`);
+        }
+      } else {
+        // Auto / Unassigned: send to available connected drivers
+        const freshJob = db.prepare('SELECT * FROM bookings WHERE id = ?').get(newJobId);
+        const onlineSids = Object.keys(connectedDrivers);
+        if (onlineSids.length > 0) {
+          onlineSids.forEach(sid => {
+            io.to(sid).emit('job_offer', freshJob);
+          });
+          console.log(`📢 Broadcast job offer #${newJobId} to ${onlineSids.length} online driver(s)`);
+        } else {
+          console.log(`ℹ️ Booking #${newJobId} pending - no drivers currently connected`);
+        }
+      }
+
+      // Refresh admin tables, active bookings & live ledger
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error in create_job:', err.message);
+    }
+  });
+
+  socket.on('admin_amend_booking', (data) => {
+    try {
+      const id = data.id || data.jobId;
+      db.prepare(`
+        UPDATE bookings SET 
+          fare = COALESCE(?, fare), 
+          pickup = COALESCE(?, pickup), 
+          dropoff = COALESCE(?, dropoff), 
+          customerNotes = COALESCE(?, customerNotes) 
+        WHERE id = ?
+      `).run(data.fare, data.pickup, data.dropoff, data.customerNotes, id);
+
+      appendAudit(id, 'AMENDED', 'Admin amended booking details');
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error in admin_amend_booking:', err.message);
+    }
+  });
+
+  socket.on('admin_reassign_booking', (data) => {
+    try {
+      const { jobId, newDriverId, reason } = data;
+      db.prepare("UPDATE bookings SET assignedDriverId = ?, status = 'Accepted' WHERE id = ?").run(newDriverId, jobId);
+      appendAudit(jobId, 'REASSIGNED', `Reassigned to ${newDriverId}. Reason: ${reason || 'None'}`);
+      const targetSocketId = Object.keys(connectedDrivers).find(sid => connectedDrivers[sid].driverId === newDriverId);
+      if (targetSocketId) {
+        const freshJob = db.prepare('SELECT * FROM bookings WHERE id = ?').get(jobId);
+        io.to(targetSocketId).emit('job_offer', freshJob);
+      }
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error in admin_reassign_booking:', err.message);
+    }
+  });
+
+  
+  socket.on('get_booking_audit', (jobId) => {
+    try {
+      const logs = db.prepare("SELECT * FROM booking_audits WHERE bookingId = ? ORDER BY id ASC").all(jobId);
+      socket.emit('booking_audit_data', { jobId, logs });
+    } catch(err) {
+      console.error('Audit query error:', err.message);
+      socket.emit('booking_audit_data', { jobId, logs: [] });
+    }
+  });
+
+  socket.on('admin_cancel_booking', (data) => {
+    try {
+      const id = data.jobId || data.id;
+      db.prepare("UPDATE bookings SET status = 'CANCELLED' WHERE id = ?").run(id);
+      appendAudit(id, 'CANCELLED', `Cancelled. Reason: ${data.reason || 'Admin cancelled'}`);
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error in admin_cancel_booking:', err.message);
+    }
+  });
+
+  // 8. DRIVER AUTHENTICATION & LOCATION
+  socket.on('driver_login', (data) => {
+    try {
+      const driverId = (data.driverId || '').toUpperCase().trim();
+      const pin = String(data.pin || '').trim();
+
+      const driver = db.prepare('SELECT * FROM drivers WHERE UPPER(driverId) = ? LIMIT 1').get(driverId);
+      if (!driver) {
+        return socket.emit('login_result', { success: false, message: 'Driver ID not found' });
+      }
+
+      if (driver.pin && String(driver.pin).trim() !== pin) {
+        return socket.emit('login_result', { success: false, message: 'Invalid PIN' });
+      }
+
+      const activeTrip = db.prepare(
+        "SELECT * FROM bookings WHERE UPPER(assignedDriverId) = ? AND status IN ('Accepted', 'ACCEPTED', 'Arrived', 'ARRIVED', 'POB') LIMIT 1"
+      ).get(driverId);
+
+      connectedDrivers[socket.id] = {
+        socketId: socket.id,
+        driverId: driver.driverId,
+        name: driver.name,
+        phone: driver.phone,
+        vehicle: driver.vehicle,
+        vehicleClass: driver.vehicleClass || 'Standard',
+        status: activeTrip ? 'On Job' : 'Available',
+        activeJobId: activeTrip ? activeTrip.id : null,
+        currentPlotName: 'Larkhall',
+        plotRank: 1
+      };
+
+      const activeTariff = getTariff(clientTenant);
+
+      socket.emit('login_result', {
+        success: true,
+        driver: connectedDrivers[socket.id],
+        activeTrip: activeTrip || null,
+        tariff: activeTariff
+      });
+
+      broadcastAdminState();
+      console.log(`✅ Driver logged in: ${driver.name} (${driver.driverId})`);
+    } catch (err) {
+      console.error('Error in driver_login:', err.message);
+      socket.emit('login_result', { success: false, message: err.message });
+    }
+  });
+
+  socket.on('driver_location_update', (coords) => {
+    const d = connectedDrivers[socket.id];
+    if (!d || !coords) return;
+    d.lat = coords.lat;
+    d.lng = coords.lng;
+
+    if (typeof updateDriverPlotPosition === 'function') {
+      updateDriverPlotPosition(d.driverId, coords.lat, coords.lng, d.status);
+    }
+
+    io.emit('driver_pos_broadcast', {
+      driverId: d.driverId,
+      name: d.name,
+      status: d.status,
+      lat: coords.lat,
+      lng: coords.lng
+    });
+  });
+
+  // 9. DRIVER TRIP LIFECYCLE
+  socket.on('driver_job_response', (data) => {
+    try {
+      const jobId = data.jobId || data.bookingId;
+      const resp = (data.response || '').toUpperCase();
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      if (resp === 'ACCEPTED' || resp === 'ACCEPT') {
+        const d = connectedDrivers[socket.id];
+        const driverId = d ? d.driverId : 'UKUND';
+        const driverName = d ? d.name : 'Mukund Desai';
+
+        if (d) {
+          d.status = 'On Job';
+          d.activeJobId = jobId;
+        }
+
+        db.prepare("UPDATE bookings SET status = 'Accepted', assignedDriverId = ?, acceptedAt = ? WHERE id = ?")
+          .run(driverId, timeStr, jobId);
+
+        appendAudit(jobId, 'ACCEPTED', `Accepted by driver ${driverName} (${driverId}) at ${timeStr}`);
+
+        const job = db.prepare('SELECT * FROM bookings WHERE id = ?').get(jobId);
+        socket.emit('active_trip_assigned', job);
+        broadcastAdminState();
+      } else {
+        appendAudit(jobId, 'REJECTED', 'Driver declined run');
+        if (typeof routeJobCascade === 'function') routeJobCascade(jobId);
+      }
+    } catch (err) {
+      console.error('Error in driver_job_response:', err.message);
+    }
+  });
+
+  socket.on('update_trip_status', (data) => {
+    try {
+      const { jobId, status, fare } = data;
+      const stUpper = (status || '').toUpperCase();
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      let col = '';
+      if (stUpper === 'ARRIVED') col = `, arrivedAt = '${timeStr}'`;
+      else if (stUpper === 'POB') col = `, pobAt = '${timeStr}'`;
+      else if (stUpper === 'COMPLETED') col = `, completedAt = '${timeStr}'`;
+
+      db.prepare(`UPDATE bookings SET status = ?, fare = COALESCE(?, fare) ${col} WHERE id = ?`).run(stUpper, fare, jobId);
+      appendAudit(jobId, stUpper, `Status changed to ${stUpper} at ${timeStr}. Fare: £${fare || 0}`);
+
+      if (stUpper === 'COMPLETED') {
+        const d = connectedDrivers[socket.id];
+        if (d) {
+          d.status = 'Available';
+          d.activeJobId = null;
+        }
+        socket.emit('wallet_refresh_needed');
+      }
+
+      broadcastAdminState();
+    } catch (err) {
+      console.error('Error in update_trip_status:', err.message);
+    }
+  });
+
+  // 10. DRIVER WALLET & EARNINGS
+  socket.on('get_driver_wallet', (data) => {
+    const dId = (data && data.driverId) ? data.driverId.toUpperCase() : (connectedDrivers[socket.id] ? connectedDrivers[socket.id].driverId : null);
+    if (!dId) return;
+    try {
+      const completedJobs = db.prepare(`
+        SELECT id, pickup, dropoff, fare, paymentMethod, createdAt 
+        FROM bookings 
+        WHERE UPPER(assignedDriverId) = UPPER(?) AND UPPER(status) = 'COMPLETED'
+        ORDER BY id DESC LIMIT 50
+      `).all(dId);
+
+      let cashTotal = 0;
+      let cardTotal = 0;
+      completedJobs.forEach(j => {
+        const f = parseFloat(j.fare) || 0;
+        const method = (j.paymentMethod || 'Cash').toUpperCase();
+        if (method === 'CASH') cashTotal += f;
+        else cardTotal += f;
+      });
+
+      const gross = cashTotal + cardTotal;
+      const tariff = getTariff(clientTenant);
+      const commPct = parseFloat(tariff.companyCommissionPct) || 20.0;
+      const commission = gross * (commPct / 100);
+      const netPay = gross - commission;
+
+      socket.emit('driver_wallet_data', {
+        success: true,
+        jobs: completedJobs,
+        totalJobs: completedJobs.length,
+        cashTotal: cashTotal.toFixed(2),
+        cardTotal: cardTotal.toFixed(2),
+        gross: gross.toFixed(2),
+        commission: commission.toFixed(2),
+        commPct: commPct,
+        netPay: netPay.toFixed(2)
+      });
+    } catch (err) {
+      console.error('Wallet error:', err.message);
+      socket.emit('driver_wallet_data', { success: false, message: err.message, jobs: [] });
+    }
+  });
+
+  // 11. MESSAGING & CHAT
+  socket.on('send_driver_message', (data) => io.emit('driver_message_broadcast', data));
+  socket.on('chat_message', (data) => io.emit('chat_broadcast', data));
+
+  // 12. DISCONNECT
+  socket.on('disconnect', () => {
+    const d = connectedDrivers[socket.id];
+    if (d) {
+      delete connectedDrivers[socket.id];
+      broadcastAdminState();
+    }
+  });
+});
+
+server.listen(3000, () => {
+  console.log('🚀 MD Transport Server Online on http://localhost:3000');
+});

@@ -1,0 +1,21 @@
+{
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^18.0.7",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3",
+    "stripe": "^23.0.0",
+    "twilio": "^6.1.2"
+  },
+  "name": "md-tranport",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

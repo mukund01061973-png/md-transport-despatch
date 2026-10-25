@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book a Taxi Online | MD Transport Bath</title>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: #0b1120; color: #ffffff; margin: 0; padding: 16px; font-size: 14px; }
+        .booking-card { max-width: 520px; margin: 20px auto; background: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        h2 { color: #38bdf8; margin-top: 0; text-align: center; }
+        label { display: block; color: #94a3b8; margin-bottom: 4px; font-size: 0.8rem; font-weight: 600; }
+        input, select, button { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #ffffff; margin-bottom: 10px; font-size: 0.9rem; outline: none; }
+        input:focus, select:focus { border-color: #38bdf8; }
+        button { background: #0284c7; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; padding: 12px; }
+        button:hover { background: #0369a1; }
+        .btn-green { background: #10b981; }
+        .btn-green:hover { background: #059669; }
+        .btn-secondary { background: #334155; }
+        .btn-secondary:hover { background: #475569; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .estimate-banner { background: #0f172a; border: 1px solid #0284c7; border-radius: 8px; padding: 12px; text-align: center; margin-bottom: 14px; }
+        .estimate-amount { font-size: 2rem; font-weight: 800; color: #10b981; font-family: 'Courier New', Courier, monospace; }
+        .confirmation-view { display: none; text-align: center; padding: 20px; }
+        .status-badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 0.85rem; margin: 8px 0; background: #0c4a6e; color: #38bdf8; border: 1px solid #0284c7; }
+        .status-pulse { animation: pulse 1.8s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .trip-details-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; text-align: left; margin: 12px 0; font-size: 0.88rem; }
+    </style>
+</head>
+<body>
+
+    <div class="booking-card" id="bookingFormSection">
+        <h2>🚕 Book Your Ride</h2>
+        <p style="text-align:center; color:#94a3b8; font-size:0.85rem; margin-top:-8px; margin-bottom:16px;">Fast, reliable transfers across Bath, Somerset & UK Airports</p>
+
+        <form id="onlineBookingForm" onsubmit="submitCustomerBooking(event)">
+            <div class="grid-2">
+                <div>
+                    <label>Your Name:</label>
+                    <input type="text" id="custName" placeholder="e.g. Sarah Jenkins" required>
+                </div>
+                <div>
+                    <label>Mobile Number:</label>
+                    <input type="tel" id="custPhone" placeholder="07795681747" required>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div>
+                    <label>Passengers:</label>
+                    <select id="custPax" onchange="calculateQuote()">
+                        <option value="1">1 Passenger</option>
+                        <option value="2">2 Passengers</option>
+                        <option value="4" selected>4 Passengers</option>
+                        <option value="6">6 Passengers</option>
+                        <option value="7">7 Passengers</option>
+                        <option value="8">8 Passengers</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Vehicle Preference:</label>
+                    <select id="custVehicleClass" onchange="calculateQuote()">
+                        <option value="ANY" selected>⚡ Any Car (First Available)</option>
+                        <option value="LOW_CAR">🚗 Saloon / Low Car (Easy Step-In)</option>
+                        <option value="Saloon">🚙 Saloon Car</option>
+                        <option value="Estate">📦 Estate Car (+Extra Luggage)</option>
+                        <option value="MPV_6">👨‍👩‍👧‍👦 6-Seat MPV</option>
+                        <option value="Minibus_7">🚐 7-Seat Minibus</option>
+                        <option value="Minibus_8">🚐 8-Seat Minibus</option>
+                        <option value="Executive">⭐ Executive VIP</option>
+                    </select>
+                </div>
+            </div>
+
+            <label>Pickup Address or Station:</label>
+            <input type="text" id="custPickup" placeholder="e.g. Bath Spa Station" oninput="triggerAutoRouting()" required>
+
+            <div id="viasWrap"></div>
+            <button type="button" style="background:#334155; font-size:0.8rem; padding:6px; margin-bottom:10px;" onclick="addViaInput()">+ Add Intermediate Stop</button>
+
+            <label>Destination Address or Airport:</label>
+            <input type="text" id="custDropoff" placeholder="e.g. Bristol Airport or Heathrow T5" oninput="triggerAutoRouting()" required>
+
+            <div class="grid-2">
+                <div>
+                    <label>Payment Option:</label>
+                    <select id="custPayMethod">
+                        <option value="Cash">💵 Cash to Driver</option>
+                        <option value="Card in Car">💳 Card to Driver</option>
+                        <option value="Prepaid Online">🔒 Pay Online via Card</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Pets Accompanying:</label>
+                    <select id="custPet" onchange="calculateQuote()">
+                        <option value="None">No Pets</option>
+                        <option value="Dog">Dog (+Surcharge)</option>
+                        <option value="Cat">Cat (+Surcharge)</option>
+                        <option value="GuideDog">Registered Guide Dog (Free)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="estimate-banner">
+                <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase;">Estimated Fixed Fare</div>
+                <div class="estimate-amount">£<span id="displayFare">5.00</span></div>
+                <div style="font-size:0.8rem; color:#38bdf8;" id="displayQuoteDetails">Enter locations to get instant price</div>
+            </div>
+
+            <button type="submit" class="btn-green" id="btnSubmitBooking">⚡ Confirm & Dispatch Booking</button>
+        </form>
+    </div>
+
+    <!-- CONFIRMATION & LIVE IN-APP TRACKING SCREEN -->
+    <div class="booking-card confirmation-view" id="confirmationSection">
+        <div style="font-size:3rem; margin-bottom:8px;">✅</div>
+        <h2 style="color:#10b981; margin-bottom:4px;">Booking Dispatched!</h2>
+        
+        <div>Reference: <strong id="confJobId" style="color:#38bdf8; font-size:1.1rem;">-</strong></div>
+        
+        <div class="status-badge status-pulse" id="confStatusText">⏳ Matching Nearest Driver...</div>
+
+        <div class="trip-details-box">
+            <div style="margin-bottom:4px;"><strong>Pickup:</strong> <span id="confPickupText">-</span></div>
+            <div style="margin-bottom:4px;"><strong>Destination:</strong> <span id="confDropoffText">-</span></div>
+            <div style="margin-bottom:4px;"><strong>Assigned Driver:</strong> <span id="confDriverText" style="color:#38bdf8; font-weight:bold;">Locating driver...</span></div>
+            <div><strong>Total Fare:</strong> <strong style="color:#10b981; font-size:1.1rem;">£<span id="confFare">0.00</span></strong></div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:14px;">
+            <button type="button" class="btn-green" onclick="startNewBooking()">➕ Book Another Ride</button>
+            <button type="button" class="btn-secondary" onclick="window.print()">🖨️ Print Receipt / Confirmation</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        let calculatedMiles = 0.0;
+        let activeTariff = {
+            baseFlagDrop: 5.00, firstMileRate: 2.00, tier1PerMile: 2.00, tier2PerMile: 1.80, tier3PerMile: 1.50,
+            viaStopFee: 5.00, petSurcharge: 6.00,
+            estatePercent: 0.10, mpvPercent: 0.40, minibus7Percent: 0.60, minibus8Percent: 0.60, execPercent: 0.70,
+            airportEstatePercent: 0.10, airportMpvPercent: 0.45, airportMinibus7Percent: 0.60, airportMinibus8Percent: 0.60, airportExecPercent: 0.70
+        };
+        let airportList = [];
+        let trackedJobId = null;
+
+        socket.on('update_tariff', (t) => { if (t) activeTariff = { ...activeTariff, ...t }; calculateQuote(); });
+        socket.on('update_airports', (airports) => { airportList = airports || []; calculateQuote(); });
+
+        function addViaInput() {
+            const wrap = document.getElementById('viasWrap');
+            const div = document.createElement('div');
+            div.style.display = 'flex';
+            div.style.gap = '6px';
+            div.innerHTML = `
+                <input type="text" class="cust-via-input" placeholder="Stopover address..." oninput="triggerAutoRouting()">
+                <button type="button" style="background:#ef4444; width:45px; padding:0; height:38px;" onclick="this.parentElement.remove(); triggerAutoRouting();">✕</button>
+            `;
+            wrap.appendChild(div);
+        }
+
+        let debounceTimer = null;
+        function triggerAutoRouting() {
+            calculateQuote();
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(async () => {
+                const pickup = document.getElementById('custPickup').value.trim();
+                const dropoff = document.getElementById('custDropoff').value.trim();
+                const vias = Array.from(document.querySelectorAll('.cust-via-input')).map(i => i.value.trim()).filter(v => v !== '');
+
+                if (!pickup || !dropoff) return;
+                const stops = [pickup, ...vias, dropoff];
+
+                try {
+                    const geocode = async (addr) => {
+                        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=gb&limit=1&q=${encodeURIComponent(addr)}`);
+                        const d = await r.json();
+                        return (d && d.length > 0) ? `${d[0].lon},${d[0].lat}` : null;
+                    };
+                    const coords = await Promise.all(stops.map(s => geocode(s)));
+                    if (coords.every(c => c !== null)) {
+                        const routeRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords.join(';')}?overview=false`);
+                        const rData = await routeRes.json();
+                        if (rData.routes && rData.routes.length > 0) {
+                            calculatedMiles = parseFloat((rData.routes[0].distance * 0.000621371).toFixed(1));
+                            calculateQuote();
+                        }
+                    }
+                } catch(e) {}
+            }, 600);
+        }
+
+        function calculateQuote() {
+            const dropoff = document.getElementById('custDropoff').value.trim().toLowerCase();
+            const vClass = document.getElementById('custVehicleClass').value;
+            const petVal = document.getElementById('custPet').value;
+            const viaCount = document.querySelectorAll('.cust-via-input').length;
+
+            let airportMatch = airportList.find(a => (a.name && dropoff.includes(a.name.toLowerCase())) || (a.iataCode && dropoff.includes(a.iataCode.toLowerCase())));
+            let finalFare = 0.0;
+
+            if (airportMatch) {
+                let base = parseFloat(airportMatch.baseRate);
+                let mult = 1.0;
+                if (vClass === 'Estate') mult += (activeTariff.airportEstatePercent || 0.10);
+                else if (vClass === 'MPV_6') mult += (activeTariff.airportMpvPercent || 0.45);
+                else if (vClass === 'Minibus_7') mult += (activeTariff.airportMinibus7Percent || 0.60);
+                else if (vClass === 'Minibus_8') mult += (activeTariff.airportMinibus8Percent || 0.60);
+                else if (vClass === 'Executive') mult += (activeTariff.airportExecPercent || 0.70);
+
+                finalFare = (base * mult) + (viaCount * (activeTariff.viaStopFee || 5.00));
+                document.getElementById('displayQuoteDetails').textContent = `Fixed Airport Rate: ${airportMatch.name}`;
+            } else if (calculatedMiles > 0) {
+                let distCost = 0.0;
+                const fMile = activeTariff.firstMileRate || 2.00;
+                const t1 = activeTariff.tier1PerMile || 2.00;
+                const t2 = activeTariff.tier2PerMile || 1.80;
+                const t3 = activeTariff.tier3PerMile || 1.50;
+
+                if (calculatedMiles <= 25) {
+                    distCost = calculatedMiles <= 1 ? (fMile * calculatedMiles) : (fMile + ((calculatedMiles - 1) * t1));
+                } else if (calculatedMiles <= 50) {
+                    distCost = fMile + (24 * t1) + ((calculatedMiles - 25) * t2);
+                } else {
+                    distCost = fMile + (24 * t1) + (25 * t2) + ((calculatedMiles - 50) * t3);
+                }
+
+                let subtotal = (activeTariff.baseFlagDrop || 5.00) + distCost;
+                let mult = 1.0;
+                if (vClass === 'Estate') mult += (activeTariff.estatePercent || 0.10);
+                else if (vClass === 'MPV_6') mult += (activeTariff.mpvPercent || 0.40);
+                else if (vClass === 'Minibus_7') mult += (activeTariff.minibus7Percent || 0.60);
+                else if (vClass === 'Minibus_8') mult += (activeTariff.minibus8Percent || 0.60);
+                else if (vClass === 'Executive') mult += (activeTariff.execPercent || 0.70);
+
+                finalFare = (subtotal * mult) + (viaCount * (activeTariff.viaStopFee || 5.00));
+                document.getElementById('displayQuoteDetails').textContent = `${calculatedMiles} Miles (${vClass === 'LOW_CAR' ? 'Saloon / Low Car' : (vClass === 'ANY' ? 'Any Car' : vClass)})`;
+            } else {
+                finalFare = activeTariff.baseFlagDrop || 5.00;
+                document.getElementById('displayQuoteDetails').textContent = `Standard Starting Rate`;
+            }
+
+            if (petVal === 'Dog' || petVal === 'Cat') finalFare += (activeTariff.petSurcharge || 6.00);
+
+            document.getElementById('displayFare').textContent = finalFare.toFixed(2);
+        }
+
+        function submitCustomerBooking(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnSubmitBooking');
+            btn.disabled = true;
+            btn.textContent = 'Dispatching to Fleet...';
+
+            const vias = Array.from(document.querySelectorAll('.cust-via-input')).map(i => i.value.trim()).filter(v => v !== '');
+            const vClass = document.getElementById('custVehicleClass').value;
+            const petVal = document.getElementById('custPet').value;
+            const hasPet = (petVal !== 'None');
+            const isGuide = (petVal === 'GuideDog');
+            const petFee = (!isGuide && hasPet) ? (activeTariff.petSurcharge || 6.00) : 0.0;
+            const fareAmount = parseFloat(document.getElementById('displayFare').textContent) || 15.00;
+
+            socket.emit('create_job', {
+                passenger: document.getElementById('custName').value.trim(),
+                phone: document.getElementById('custPhone').value.trim(),
+                pickup: document.getElementById('custPickup').value.trim(),
+                vias: vias,
+                dropoff: document.getElementById('custDropoff').value.trim(),
+                bookingType: 'Immediate',
+                pickupDateTime: null,
+                passengers: parseInt(document.getElementById('custPax').value),
+                vehicleClass: vClass,
+                strictVehicle: (vClass === 'LOW_CAR' || vClass === 'Saloon' || vClass === 'Executive'),
+                hasPet: hasPet,
+                petType: petVal,
+                isGuideDog: isGuide,
+                petFee: petFee,
+                fare: fareAmount,
+                targetDriverId: 'UNASSIGNED',
+                paymentMethod: document.getElementById('custPayMethod').value,
+                accountNumber: null,
+                customerNotes: 'Online Customer Web Booking'
+            });
+        }
+
+        socket.on('job_created_ack', (res) => {
+            if (res && res.success) {
+                trackedJobId = res.jobId;
+                document.getElementById('bookingFormSection').style.display = 'none';
+                document.getElementById('confirmationSection').style.display = 'block';
+
+                document.getElementById('confJobId').textContent = res.jobId;
+                document.getElementById('confFare').textContent = parseFloat(document.getElementById('displayFare').textContent).toFixed(2);
+                document.getElementById('confPickupText').textContent = document.getElementById('custPickup').value.trim();
+                document.getElementById('confDropoffText').textContent = document.getElementById('custDropoff').value.trim();
+            } else {
+                alert('Dispatch error. Please try again.');
+                document.getElementById('btnSubmitBooking').disabled = false;
+                document.getElementById('btnSubmitBooking').textContent = '⚡ Confirm & Dispatch Booking';
+            }
+        });
+
+        // LIVE STATUS UPDATER: Watch for Driver Acceptance and Progress
+        socket.on('update_jobs_list', (jobs) => {
+            if (!trackedJobId) return;
+            const myJob = (jobs || []).find(j => j.id === trackedJobId);
+            if (!myJob) return;
+
+            const badge = document.getElementById('confStatusText');
+            const driverTxt = document.getElementById('confDriverText');
+
+            if (myJob.status === 'Accepted') {
+                badge.className = 'status-badge';
+                badge.style.background = '#064e3b';
+                badge.style.color = '#34d399';
+                badge.style.borderColor = '#10b981';
+                badge.textContent = '🟢 Driver Confirmed & En Route to You!';
+                driverTxt.textContent = `${myJob.assignedDriverId || 'Assigned Driver'}`;
+            } else if (myJob.status === 'Arrived') {
+                badge.className = 'status-badge';
+                badge.style.background = '#78350f';
+                badge.style.color = '#fde047';
+                badge.style.borderColor = '#f59e0b';
+                badge.textContent = '📍 Driver Has Arrived at Pickup Location!';
+            } else if (myJob.status === 'POB') {
+                badge.className = 'status-badge';
+                badge.style.background = '#064e3b';
+                badge.style.color = '#34d399';
+                badge.textContent = '🚕 Trip in Progress (Passenger on Board)';
+            } else if (myJob.status === 'Completed') {
+                badge.className = 'status-badge';
+                badge.style.background = '#1e293b';
+                badge.style.color = '#38bdf8';
+                badge.textContent = '✅ Trip Completed. Thank You!';
+            }
+        });
+
+        // RESET FUNCTION FOR NEW BOOKINGS
+        function startNewBooking() {
+            trackedJobId = null;
+            document.getElementById('onlineBookingForm').reset();
+            document.getElementById('viasWrap').innerHTML = '';
+            document.getElementById('displayFare').textContent = '5.00';
+            document.getElementById('displayQuoteDetails').textContent = 'Enter locations to get instant price';
+            document.getElementById('btnSubmitBooking').disabled = false;
+            document.getElementById('btnSubmitBooking').textContent = '⚡ Confirm & Dispatch Booking';
+
+            document.getElementById('confirmationSection').style.display = 'none';
+            document.getElementById('bookingFormSection').style.display = 'block';
+        }
+    </script>
+</body>
+</html>

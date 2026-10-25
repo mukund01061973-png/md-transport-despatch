@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corporate Client Portal | MD Transport</title>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: #0f172a; color: #ffffff; margin: 0; padding: 20px; font-size: 14px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .card { background: #1e293b; border-radius: 12px; padding: 22px; border: 1px solid #334155; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #334155; padding-bottom: 12px; margin-bottom: 20px; }
+        label { display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px; font-weight: bold; }
+        input, select, button { width: 100%; padding: 11px 12px; border-radius: 6px; font-size: 0.95rem; margin-bottom: 12px; outline: none; }
+        input, select { background: #0f172a; border: 1px solid #334155; color: #ffffff; }
+        input:focus, select:focus { border-color: #38bdf8; }
+        button { border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn-green { background: #10b981; color: white; padding: 14px; font-size: 1rem; }
+        .btn-green:hover { background: #059669; }
+        .btn-blue { background: #0284c7; color: white; }
+        .btn-red { background: #ef4444; color: white; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .airport-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+        .airport-pill { background: #0f172a; border: 1px solid #0284c7; color: #38bdf8; padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; cursor: pointer; transition: 0.15s; }
+        .airport-pill:hover { background: #0284c7; color: #ffffff; }
+        
+        .veh-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
+        .veh-card { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; text-align: center; cursor: pointer; transition: 0.2s; }
+        .veh-card:hover { border-color: #38bdf8; }
+        .veh-card.active { border: 2px solid #10b981; background: #064e3b; }
+        .veh-name { font-size: 0.9rem; font-weight: bold; }
+        .veh-pax { font-size: 0.75rem; color: #94a3b8; margin: 2px 0; }
+        .veh-price { font-size: 1.15rem; font-weight: bold; color: #10b981; }
+        .veh-card.active .veh-price { color: #ffffff; }
+
+        .quote-box { background: #000; border: 2px solid #10b981; border-radius: 10px; padding: 16px; text-align: center; margin-bottom: 18px; }
+        .quote-val { font-size: 2.3rem; font-weight: 900; color: #10b981; font-family: 'Courier New', Courier, monospace; margin: 4px 0; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.88rem; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #334155; }
+        th { background-color: #0f172a; color: #38bdf8; font-weight: 600; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; display: inline-block; }
+        .badge-green { background: #064e3b; color: #34d399; }
+        .badge-blue { background: #0c4a6e; color: #38bdf8; }
+        .badge-yellow { background: #78350f; color: #fde047; }
+        .badge-purple { background: #581c87; color: #c084fc; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        
+        <!-- LOGIN VIEW -->
+        <div id="corpLoginView" class="card" style="max-width: 440px; margin: 40px auto;">
+            <h2 style="color: #38bdf8; text-align: center; margin-top: 0;">🏢 Corporate Client Portal</h2>
+            <p style="text-align: center; color: #94a3b8; font-size: 0.85rem; margin-top: -6px;">Direct Booking, Invoicing & Live Trip Tracking</p>
+
+            <form id="corpLoginForm" onsubmit="doCorpLogin(event)">
+                <label>Account Number / Code:</label>
+                <input type="text" id="loginAccNum" placeholder="e.g. ACC-101" required>
+
+                <label>Account PIN / Password:</label>
+                <input type="password" id="loginAccPin" placeholder="4-Digit PIN (Default: 1234)" required>
+
+                <button type="submit" id="loginSubmitBtn" class="btn-green" style="margin-top: 5px;">🔐 Sign In to Account</button>
+            </form>
+            <div style="text-align: center; font-size: 0.8rem; color: #64748b; margin-top: 10px;">
+                MD Transport Corporate Services | Bath, UK
+            </div>
+        </div>
+
+        <!-- MAIN CORPORATE DASHBOARD VIEW -->
+        <div id="corpDashboardView" style="display: none;">
+            
+            <div class="header">
+                <div>
+                    <h2 style="margin: 0; color: #38bdf8;" id="dispCompanyName">Apex Global Logistics</h2>
+                    <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 0.85rem;">Account: <strong id="dispAccNumber" style="color:#fff;">ACC-101</strong> | Terms: <span id="dispTerms">30 Days Net</span> | Agreed Discount: <span id="dispDiscount" style="color:#34d399;">5%</span></p>
+                </div>
+                <div>
+                    <button class="btn-red" style="width: auto; padding: 6px 14px; font-size: 0.85rem;" onclick="doCorpLogout()">Sign Out</button>
+                </div>
+            </div>
+
+            <!-- BOOKING SUCCESS ALERT -->
+            <div id="bookingSuccessNotice" class="card" style="display: none; background: #064e3b; border-color: #34d399; text-align: center;">
+                <h3 style="margin: 0 0 6px 0; color: #34d399;">✓ Corporate Ride Dispatched Successfully!</h3>
+                <p style="margin: 0; color: #e2e8f0; font-size: 0.88rem;">Live tracking link has been sent via SMS to the passenger.</p>
+                <a id="directTrackLink" href="#" target="_blank" style="color:#38bdf8; font-weight:bold; text-decoration:underline; display:block; margin-top:8px;">Open Live GPS Passenger Tracker</a>
+            </div>
+
+            <!-- 1. BOOKING FORM -->
+            <div class="card">
+                <h3 style="margin-top: 0; color: #38bdf8;">📝 Book Corporate Transport</h3>
+
+                <form id="corpBookingForm" onsubmit="submitCorpBooking(event)">
+                    
+                    <label>✈️ Popular Hub Destinations (1-Click Quote):</label>
+                    <div class="airport-bar" id="airportPillsContainer"></div>
+
+                    <div class="grid-2">
+                        <div>
+                            <label>Pickup Location / Postcode:</label>
+                            <input type="text" id="pickupLoc" placeholder="e.g. Bath Spa Station or BA1 6BA" oninput="triggerAutoDistance()" value="Bath Spa Station" required>
+                        </div>
+                        <div>
+                            <label>Destination Location / Airport:</label>
+                            <input type="text" id="dropoffLoc" placeholder="e.g. Heathrow Airport or BA2 7AY" oninput="triggerAutoDistance()" required>
+                        </div>
+                    </div>
+
+                    <label>Select Vehicle Category:</label>
+                    <div class="veh-grid">
+                        <div class="veh-card active" id="card-Saloon" onclick="chooseVehicle('Saloon', 4)">
+                            <div class="veh-name">🚗 Standard Saloon</div>
+                            <div class="veh-pax">1-4 Passengers</div>
+                            <div class="veh-price" id="price-Saloon">£0.00</div>
+                        </div>
+                        <div class="veh-card" id="card-Estate" onclick="chooseVehicle('Estate', 4)">
+                            <div class="veh-name">🚙 Estate Car</div>
+                            <div class="veh-pax">4 Pax + Luggage</div>
+                            <div class="veh-price" id="price-Estate">£0.00</div>
+                        </div>
+                        <div class="veh-card" id="card-MPV_6" onclick="chooseVehicle('MPV_6', 6)">
+                            <div class="veh-name">🚐 6-Seat MPV</div>
+                            <div class="veh-pax">Up to 6 Passengers</div>
+                            <div class="veh-price" id="price-MPV_6">£0.00</div>
+                        </div>
+                        <div class="veh-card" id="card-Minibus" onclick="chooseVehicle('Minibus', 8)">
+                            <div class="veh-name">🚐 Minibus / Van (7–8 Seats)</div>
+                            <div class="veh-pax">Large Groups</div>
+                            <div class="veh-price" id="price-Minibus">£0.00</div>
+                        </div>
+                        <div class="veh-card" id="card-Executive" style="grid-column: span 2;" onclick="chooseVehicle('Executive', 4)">
+                            <div class="veh-name">✨ Executive VIP Chauffeur</div>
+                            <div class="veh-pax">Executive Saloon (VIP Transfers)</div>
+                            <div class="veh-price" id="price-Executive">£0.00</div>
+                        </div>
+                    </div>
+
+                    <div class="quote-box">
+                        <div style="font-size: 0.78rem; color: #34d399; text-transform: uppercase; font-weight: bold;" id="quoteTitle">GUARANTEED CORPORATE RATE</div>
+                        <div class="quote-val">£<span id="displayFare">0.00</span></div>
+                        <div style="font-size: 0.8rem; color: #94a3b8;" id="fareExplanation">Includes your corporate account discount.</div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div>
+                            <label>Passenger Full Name:</label>
+                            <input type="text" id="passengerName" placeholder="e.g. John Doe / Executive Guest" required>
+                        </div>
+                        <div>
+                            <label>Passenger Mobile (For SMS Tracking):</label>
+                            <input type="tel" id="passengerPhone" placeholder="e.g. 07795681747" required>
+                        </div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div>
+                            <label>PO / Cost Center Reference Number:</label>
+                            <input type="text" id="poRefNumber" placeholder="e.g. PO-9982 or CC-401" required>
+                        </div>
+                        <div>
+                            <label>Exact Passenger Count:</label>
+                            <select id="paxCount" onchange="autoSyncPaxSelection()">
+                                <option value="1">1 Passenger</option>
+                                <option value="2">2 Passengers</option>
+                                <option value="3">3 Passengers</option>
+                                <option value="4" selected>4 Passengers</option>
+                                <option value="5">5 Passengers</option>
+                                <option value="6">6 Passengers</option>
+                                <option value="7">7 Passengers (Minibus)</option>
+                                <option value="8">8 Passengers (Minibus)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-green">⚡ Dispatch Corporate Booking</button>
+                </form>
+            </div>
+
+            <!-- 2. ACCOUNT RIDE HISTORY & LIVE STATUS -->
+            <div class="card">
+                <h3 style="margin-top: 0; color: #38bdf8;">📋 Account Bookings & Live Ride Tracking</h3>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Ref</th>
+                                <th>Date / Time</th>
+                                <th>Passenger</th>
+                                <th>PO Ref</th>
+                                <th>Journey</th>
+                                <th>Fare</th>
+                                <th>Status</th>
+                                <th>Tracking</th>
+                            </tr>
+                        </thead>
+                        <tbody id="corpJobsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        let currentAccount = null;
+        let currentTariff = {
+            baseFare: 3.50, firstMileRate: 2.50, perMileRate: 2.00, longDistanceRate: 1.60,
+            defaultLocalPricingMode: 'meter', meterDistancePulseYard: 176, meterDistancePulseCost: 0.20,
+            localEstatePercent: 0.10, localMpvPercent: 0.40, localMinibus7Percent: 0.60, localMinibus8Percent: 0.80, localExecPercent: 0.80,
+            estatePercent: 0.10, mpvPercent: 0.45, minibus7Percent: 0.60, minibus8Percent: 0.60, execPercent: 0.70
+        };
+        let currentAirports = [];
+        let selectedCategory = 'Saloon';
+        let calculatedSaloonBase = 0.00;
+        let finalBookingFare = 0.00;
+        let routeMiles = 0.0;
+        let activePricingType = 'Corporate Guaranteed Rate';
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedAcc = localStorage.getItem('md_corp_acc');
+            const savedPin = localStorage.getItem('md_corp_pin');
+            if (savedAcc && savedPin) {
+                socket.emit('corporate_client_login', { accountNumber: savedAcc, pin: savedPin });
+            }
+        });
+
+        function doCorpLogin(e) {
+            if (e) e.preventDefault();
+            const acc = document.getElementById('loginAccNum').value.trim();
+            const pin = document.getElementById('loginAccPin').value.trim();
+
+            if (!acc || !pin) {
+                alert('Please enter both your Account Number and PIN.');
+                return;
+            }
+
+            document.getElementById('loginSubmitBtn').textContent = 'Authenticating...';
+            localStorage.setItem('md_corp_acc', acc);
+            localStorage.setItem('md_corp_pin', pin);
+            socket.emit('corporate_client_login', { accountNumber: acc, pin });
+        }
+
+        function doCorpLogout() {
+            localStorage.removeItem('md_corp_acc');
+            localStorage.removeItem('md_corp_pin');
+            location.reload();
+        }
+
+        socket.on('corp_login_result', (res) => {
+            document.getElementById('loginSubmitBtn').textContent = '🔐 Sign In to Account';
+            if (res.success) {
+                currentAccount = res.account;
+                document.getElementById('corpLoginView').style.display = 'none';
+                document.getElementById('corpDashboardView').style.display = 'block';
+
+                document.getElementById('dispCompanyName').textContent = currentAccount.companyName;
+                document.getElementById('dispAccNumber').textContent = currentAccount.accountNumber;
+                document.getElementById('dispTerms').textContent = currentAccount.paymentTerms;
+                document.getElementById('dispDiscount').textContent = `${currentAccount.discountPct}%`;
+
+                renderCorpJobs(res.jobs);
+                socket.emit('request_state');
+            } else {
+                alert('Login Failed: ' + res.message);
+                localStorage.removeItem('md_corp_acc');
+                localStorage.removeItem('md_corp_pin');
+            }
+        });
+
+        socket.on('update_corp_jobs', (jobs) => {
+            renderCorpJobs(jobs);
+        });
+
+        socket.on('update_tariff', (tariff) => {
+            if (tariff) {
+                currentTariff = tariff;
+                recalculateAll();
+            }
+        });
+
+        socket.on('update_airports', (airports) => {
+            if (airports && airports.length > 0) {
+                currentAirports = airports;
+                renderAirportPills();
+                recalculateAll();
+            }
+        });
+
+        function renderAirportPills() {
+            const container = document.getElementById('airportPillsContainer');
+            container.innerHTML = '';
+            currentAirports.forEach(port => {
+                const div = document.createElement('div');
+                div.className = 'airport-pill';
+                div.textContent = `✈️ ${port.name} (£${Number(port.baseRate).toFixed(0)})`;
+                div.onclick = () => selectAirportDestination(port.name, port.baseRate);
+                container.appendChild(div);
+            });
+        }
+
+        function selectAirportDestination(name, baseRate) {
+            document.getElementById('dropoffLoc').value = name;
+            calculatedSaloonBase = parseFloat(baseRate);
+            routeMiles = 0.0;
+            activePricingType = `Airport Fixed (${name})`;
+            recalculateAll();
+        }
+
+        function chooseVehicle(cat, maxPax) {
+            selectedCategory = cat;
+            document.querySelectorAll('.veh-card').forEach(c => c.classList.remove('active'));
+            const card = document.getElementById(`card-${cat}`);
+            if (card) card.classList.add('active');
+            
+            const paxSel = document.getElementById('paxCount');
+            if (parseInt(paxSel.value) > maxPax) {
+                paxSel.value = String(maxPax);
+            }
+            recalculateAll();
+        }
+
+        function autoSyncPaxSelection() {
+            const pax = parseInt(document.getElementById('paxCount').value);
+            if (pax >= 7) chooseVehicle('Minibus', 8);
+            else if (pax >= 5) chooseVehicle('MPV_6', 6);
+            else recalculateAll();
+        }
+
+        function getMultiplierForCategory(cat, paxCount, isLongOrAirport) {
+            if (cat === 'Saloon') return 1.0;
+            if (isLongOrAirport) {
+                if (cat === 'Estate') return 1 + (parseFloat(currentTariff.estatePercent) || 0.10);
+                if (cat === 'MPV_6') return 1 + (parseFloat(currentTariff.mpvPercent) || 0.45);
+                if (cat === 'Minibus') {
+                    const pct = (paxCount === 7) ? (currentTariff.minibus7Percent || 0.60) : (currentTariff.minibus8Percent || 0.60);
+                    return 1 + parseFloat(pct);
+                }
+                if (cat === 'Executive') return 1 + (parseFloat(currentTariff.execPercent) || 0.70);
+            } else {
+                if (cat === 'Estate') return 1 + (parseFloat(currentTariff.localEstatePercent) || 0.10);
+                if (cat === 'MPV_6') return 1 + (parseFloat(currentTariff.localMpvPercent) || 0.40);
+                if (cat === 'Minibus') {
+                    const pct = (paxCount === 7) ? (currentTariff.localMinibus7Percent || 0.60) : (currentTariff.localMinibus8Percent || 0.80);
+                    return 1 + parseFloat(pct);
+                }
+                if (cat === 'Executive') return 1 + (parseFloat(currentTariff.localExecPercent) || 0.80);
+            }
+            return 1.0;
+        }
+
+        function recalculateAll() {
+            const dropoffStr = document.getElementById('dropoffLoc').value.trim().toLowerCase();
+            const pax = parseInt(document.getElementById('paxCount').value);
+            
+            let matchedAirport = currentAirports.find(p => 
+                (p.name && dropoffStr.includes(p.name.toLowerCase())) || 
+                (p.iataCode && dropoffStr.includes(p.iataCode.toLowerCase()))
+            );
+
+            const isLongOrAirport = !!matchedAirport || routeMiles >= 50;
+
+            if (matchedAirport) {
+                calculatedSaloonBase = parseFloat(matchedAirport.baseRate);
+                activePricingType = `Airport Fixed (${matchedAirport.name})`;
+            } else if (routeMiles > 0) {
+                const base = parseFloat(currentTariff.baseFare) || 3.50;
+                if (routeMiles >= 50) {
+                    const first50 = base + parseFloat(currentTariff.firstMileRate || 2.50) + (49 * parseFloat(currentTariff.perMileRate || 2.00));
+                    calculatedSaloonBase = first50 + ((routeMiles - 50) * parseFloat(currentTariff.longDistanceRate || 1.60));
+                    activePricingType = `Long Distance Fixed (${routeMiles} Miles)`;
+                } else {
+                    const firstMile = parseFloat(currentTariff.firstMileRate) || 2.50;
+                    const perMile = parseFloat(currentTariff.perMileRate) || 2.00;
+                    calculatedSaloonBase = base + (routeMiles <= 1 ? firstMile : firstMile + ((routeMiles - 1) * perMile));
+                    activePricingType = `Local Mileage Fare (${routeMiles} Miles)`;
+                }
+            } else {
+                calculatedSaloonBase = parseFloat(currentTariff.baseFare) || 3.50;
+            }
+
+            const discountPct = currentAccount ? (parseFloat(currentAccount.discountPct) || 0.0) : 0.0;
+            const discountMultiplier = 1.0 - (discountPct / 100.0);
+
+            ['Saloon', 'Estate', 'MPV_6', 'Minibus', 'Executive'].forEach(cat => {
+                const mult = getMultiplierForCategory(cat, pax, isLongOrAirport);
+                const fare = (calculatedSaloonBase * mult) * discountMultiplier;
+                const priceElem = document.getElementById(`price-${cat}`);
+                if (priceElem) priceElem.textContent = `£${fare.toFixed(2)}`;
+            });
+
+            const activeMult = getMultiplierForCategory(selectedCategory, pax, isLongOrAirport);
+            finalBookingFare = (calculatedSaloonBase * activeMult) * discountMultiplier;
+
+            document.getElementById('displayFare').textContent = finalBookingFare.toFixed(2);
+            document.getElementById('quoteTitle').textContent = activePricingType.toUpperCase();
+            document.getElementById('fareExplanation').innerHTML = `Selected: <strong>${selectedCategory === 'Minibus' ? 'Minibus / Van (7–8 Seats)' : selectedCategory}</strong> ${discountPct > 0 ? '(Includes -' + discountPct + '% Account Discount)' : ''}`;
+        }
+
+        let debounceTimer = null;
+        function triggerAutoDistance() {
+            recalculateAll();
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(async () => {
+                const pickup = document.getElementById('pickupLoc').value.trim();
+                const dropoff = document.getElementById('dropoffLoc').value.trim();
+                if (!pickup || !dropoff) return;
+
+                try {
+                    const res1 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=gb&q=${encodeURIComponent(pickup)}`);
+                    const data1 = await res1.json();
+                    const res2 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=gb&q=${encodeURIComponent(dropoff)}`);
+                    const data2 = await res2.json();
+
+                    if (data1.length > 0 && data2.length > 0) {
+                        const routeRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${data1[0].lon},${data1[0].lat};${data2[0].lon},${data2[0].lat}?overview=false`);
+                        const routeData = await routeRes.json();
+                        if (routeData.routes && routeData.routes.length > 0) {
+                            routeMiles = parseFloat((routeData.routes[0].distance * 0.000621371).toFixed(1));
+                            recalculateAll();
+                        }
+                    }
+                } catch(e){}
+            }, 500);
+        }
+
+        function submitCorpBooking(e) {
+            e.preventDefault();
+
+            const passenger = document.getElementById('passengerName').value.trim();
+            const phone = document.getElementById('passengerPhone').value.trim();
+            const poNumber = document.getElementById('poRefNumber').value.trim();
+            const passengers = parseInt(document.getElementById('paxCount').value);
+            const pickup = document.getElementById('pickupLoc').value.trim();
+            const dropoff = document.getElementById('dropoffLoc').value.trim();
+
+            let targetClass = selectedCategory;
+            if (selectedCategory === 'Minibus') {
+                targetClass = (passengers === 8) ? 'Minibus_8' : 'Minibus_7';
+            }
+
+            socket.emit('customer_create_booking', {
+                passenger,
+                phone,
+                passengers,
+                vehicleClass: targetClass,
+                pickup,
+                dropoff,
+                fare: finalBookingFare,
+                paymentMethod: 'Corporate Account',
+                accountNumber: currentAccount.accountNumber,
+                poNumber: poNumber,
+                pricingType: activePricingType
+            });
+        }
+
+        socket.on('booking_confirmed', (res) => {
+            if (res.success) {
+                const notice = document.getElementById('bookingSuccessNotice');
+                const link = document.getElementById('directTrackLink');
+                notice.style.display = 'block';
+                link.href = `/track.html?id=${res.jobId}`;
+                document.getElementById('corpBookingForm').reset();
+                recalculateAll();
+                notice.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                alert('Booking Error: ' + res.message);
+            }
+        });
+
+        function renderCorpJobs(jobs) {
+            const tbody = document.getElementById('corpJobsTableBody');
+            tbody.innerHTML = '';
+            if (!jobs || jobs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#64748b; padding:15px;">No bookings logged for this corporate account yet.</td></tr>';
+                return;
+            }
+
+            jobs.forEach(j => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${j.id}</strong></td>
+                    <td><small style="color:#94a3b8;">${j.createdAt}</small></td>
+                    <td><strong>${j.passenger}</strong><br><small style="color:#38bdf8;">${j.phone}</small></td>
+                    <td><span class="badge badge-purple">${j.poNumber || 'N/A'}</span></td>
+                    <td><strong>From:</strong> ${j.pickup}<br><strong>To:</strong> ${j.dropoff}</td>
+                    <td><strong style="color:#10b981;">£${Number(j.fare).toFixed(2)}</strong></td>
+                    <td><span class="badge badge-${j.status === 'Completed' ? 'green' : (j.status === 'Accepted' ? 'blue' : 'yellow')}">${j.status}</span></td>
+                    <td><a href="/track.html?id=${j.id}" target="_blank" style="color:#38bdf8; font-weight:bold; font-size:0.8rem; text-decoration:underline;">Track Live</a></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>
