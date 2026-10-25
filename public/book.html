@@ -692,5 +692,54 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const passengerInput = document.getElementById("passengers") || document.querySelector("select[name="passengers"]");
+    const vehicleCards = document.querySelectorAll(".vehicle-option, .car-option, .vehicle-card");
+    if (passengerInput) {
+        passengerInput.addEventListener("change", function() {
+            const passengerCount = parseInt(this.value) || 1;
+            vehicleCards.forEach(card => {
+                const maxCapacity = parseInt(card.getAttribute("data-capacity") || 4);
+                if (passengerCount > maxCapacity) {
+                    card.style.display = "none";
+                } else {
+                    card.style.display = "block";
+                }
+            });
+        });
+    }
+});
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const passengerInput = document.getElementById("passengers") || document.querySelector("select[name="passengers"]");
+    const vehicleCards = document.querySelectorAll(".vehicle-option, .car-option, .vehicle-card");
+    const priceDisplay = document.getElementById("total-price") || document.querySelector(".total-price, #price");
+
+    if (passengerInput) {
+        passengerInput.addEventListener("change", function() {
+            const passengerCount = parseInt(this.value) || 1;
+            vehicleCards.forEach(card => {
+                const maxCapacity = parseInt(card.getAttribute("data-capacity") || 4);
+                const baseMultiplier = parseFloat(card.getAttribute("data-multiplier") || 1);
+                
+                if (passengerCount > maxCapacity) {
+                    card.style.display = "none";
+                } else {
+                    card.style.display = "block";
+                    // Update price if a base price exists
+                    const basePrice = parseFloat(card.getAttribute("data-base-price") || card.dataset.price || 15);
+                    const calculatedPrice = (basePrice * (passengerCount > 4 ? 1.4 : 1)).toFixed(2);
+                    const priceEl = card.querySelector(".price-text");
+                    if (priceEl) priceEl.innerText = "£" + calculatedPrice;
+                }
+            });
+        });
+    }
+});
+</script>
 </body>
 </html>
