@@ -1802,5 +1802,26 @@ function syncFeeToServer(arrMins, totalFee, enRouteMins, enRouteFee) {
         }
     </script>
     
+
+<script>
+// Dynamic Driver Location & Plot Updater
+if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(position => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        
+        // Update location text element if it exists
+        const areaEl = document.getElementById("current-area") || document.getElementById("location-display") || document.querySelector(".current-location");
+        if (areaEl) {
+            // If we are far from Bath / Larkhall center, show generic or coordinates/village fallback
+            if (lat < 51.35 || lat > 51.45 || lng < -2.45 || lng > -2.2) {
+                areaEl.innerText = "Outside Plot / Village (Live GPS)";
+            } else {
+                areaEl.innerText = "Larkhall / Bath Zone";
+            }
+        }
+    }, err => console.error(err), { enableHighAccuracy: true });
+}
+</script>
 </body>
 </html>
