@@ -1823,5 +1823,37 @@ if (navigator.geolocation) {
     }, err => console.error(err), { enableHighAccuracy: true });
 }
 </script>
+
+<script>
+// Smart 5-Plot Multi-Zone GPS Matcher
+if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(position => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const plots = [
+            { name: "City Centre", lat: 51.381, lng: -2.359 },
+            { name: "Station", lat: 51.378, lng: -2.353 },
+            { name: "Larkhall", lat: 51.400, lng: -2.335 },
+            { name: "Oldfield Park", lat: 51.380, lng: -2.375 },
+            { name: "Weston", lat: 51.393, lng: -2.395 }
+        ];
+        let closest = "Outside Plot / Village";
+        let minDistance = 999999;
+        if (lat >= 51.35 && lat <= 51.43 && lng >= -2.43 && lng <= -2.30) {
+            plots.forEach(p => {
+                const dist = Math.sqrt(Math.pow(lat - p.lat, 2) + Math.pow(lng - p.lng, 2));
+                if (dist < minDistance) { minDistance = dist; closest = p.name; }
+            });
+        } else {
+            closest = "Outside Plot / Village (Live GPS)";
+        }
+        window.myCurrentPlot = closest;
+        const pNameEl = document.getElementById("curPlotNameTxt");
+        if (pNameEl) pNameEl.textContent = closest;
+        const areaEl = document.getElementById("current-area") || document.getElementById("location-display");
+        if (areaEl) areaEl.innerText = closest;
+    }, err => console.error(err), { enableHighAccuracy: true });
+}
+</script>
 </body>
 </html>
