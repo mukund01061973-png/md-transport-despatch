@@ -251,8 +251,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             <!-- TENANT SELECTOR -->
             <select id="tenantSelect" onchange="switchTenant()" style="width:130px; margin:0; padding:4px 6px; font-size:0.75rem; background:#0f172a; border:1px solid #0284c7; color:#38bdf8; font-weight:bold; border-radius:4px; cursor:pointer;">
-                <option value="ALL" selected>🌐 All Areas / Network</option>
-                <option value="BA">📍 Bath Fleet</option>
+                <option value="ALL">🌐 All Areas / Network</option>
+                <option value="BA" selected>📍 Bath Fleet</option>
                 <option value="BS">📍 Bristol Fleet</option>
                 <option value="SN">📍 Swindon Fleet</option>
                 <option value="GL">📍 Gloucester Fleet</option>
@@ -1022,6 +1022,8 @@ document.addEventListener("DOMContentLoaded", () => {
     <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
     <script>
         const socket = io();
+        // Automatically sync initial fleet tenant on startup
+        setTimeout(() => { if (typeof switchTenant === 'function') switchTenant(); }, 200);
         let allAccounts = [], allJobs = [], allDrivers = [], allPlots = [], allAirports = [];
         let currentFilter = 'all';
         let customPricingActive = false;
@@ -2572,7 +2574,13 @@ function openAmendModal(jobId) {
             if (splitBanner) splitBanner.style.display = "none";
         }
 
-        function recalculateDispatchFare() {
+        async function recalculateDispatchFare() {
+    // Ensure distance is fetched if addresses are present and distance is 0
+    const pVal = document.getElementById('jobPickup')?.value;
+    const dVal = document.getElementById('jobDropoff')?.value;
+    if (pVal && dVal && dispatchCalculatedMiles === 0 && typeof fetchDispatchDistance === 'function') {
+        await fetchDispatchDistance();
+    }
             if (customPricingActive) return;
 
             const pickup = (document.getElementById('jobPickup').value || '').trim().toLowerCase();
@@ -2624,7 +2632,7 @@ function openAmendModal(jobId) {
             });
 
             if (airportMatch) {
-                let base = parseFloat(airportMatch.baseRate);
+                let base = parseFloat(airportMatch.baseRate || 0);
                 let airMult = 1.0;
                 if (vClass === 'Estate') airMult += (parseFloat(document.getElementById('tfAirportEstatePct').value) || 10) / 100.0;
                 else if (vClass === 'MPV_6') airMult += (parseFloat(document.getElementById('tfAirportMpvPct').value) || 45) / 100.0;
@@ -2633,10 +2641,20 @@ function openAmendModal(jobId) {
                 else if (vClass === 'Executive') airMult += (parseFloat(document.getElementById('tfAirportExecPct').value) || 70) / 100.0;
 
                 let finalFare = (base * airMult) + (viaCount * (parseFloat(document.getElementById('tfViaStopFee').value) || 5.00)) + (hasPet ? (parseFloat(document.getElementById('tfPetSurcharge').value) || 6.00) : 0);
-                if (busySurge > 0) finalFare = finalFare * (1 + (busySurge / 100.0));
 
+                const isHeathrow = airportMatch.iataCode === 'LHR' || (airportMatch.name && airportMatch.name.toLowerCase().includes('heathrow'));
+                const baselineMiles = isHeathrow ? 100 : 30;
+                const miles = (typeof dispatchCalculatedMiles !== 'undefined' && dispatchCalculatedMiles > 0) ? dispatchCalculatedMiles : 0.0;
+
+                if (miles > baselineMiles) {
+                    const extraMiles = miles - baselineMiles;
+                    const extraPerMileRate = 1.80;
+                    finalFare += (extraMiles * extraPerMileRate * airMult);
+                }
+
+                if (busySurge > 0) finalFare = finalFare * (1 + (busySurge / 100.0));
                 document.getElementById('jobFare').value = finalFare.toFixed(2);
-                document.getElementById('dispatchPricingLabel').textContent = `Fixed Airport (${airportMatch.name})`;
+                document.getElementById('dispatchPricingLabel').textContent = `Fixed Airport (${airportMatch.name})` + (miles > baselineMiles ? ` + Outside Area Surcharge (${miles}m)` : '');
                 return;
             }
 
