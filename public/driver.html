@@ -707,10 +707,10 @@
             if (myDriver) {
                 const pNameEl = document.getElementById("curPlotNameTxt");
                 const pRankEl = document.getElementById("curPlotRankTxt");
-                if (pNameEl) pNameEl.textContent = myDriver.currentPlotName || "Larkhall";
+                if (pNameEl) pNameEl.textContent = myDriver.currentPlotName || "Unassigned";
                 if (pRankEl) pRankEl.textContent = "Position #" + (myDriver.plotRank || 1);
                 const hdrRank = document.getElementById("hdrQueueRank");
-                if (hdrRank) hdrRank.textContent = "🚕 Stand: " + (myDriver.currentPlotName || "Larkhall") + " • #" + (myDriver.plotRank || 1);
+                if (hdrRank) hdrRank.textContent = "🚕 Stand: " + (myDriver.currentPlotName || "Unassigned") + " • #" + (myDriver.plotRank || 1);
             }
 
             // Load Master Tariff values

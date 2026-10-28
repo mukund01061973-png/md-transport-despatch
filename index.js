@@ -2980,3 +2980,56 @@ app.get('/api/admin/driver-statement', (req, res) => {
 server.listen(3000, () => {
   console.log('🚀 MD Transport Server Online on http://localhost:3000');
 });
+
+
+// --- FLEET & VEHICLE MANAGEMENT API ---
+if (db && typeof db.run === "function") {
+    db.run(`CREATE TABLE IF NOT EXISTS vehicles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        make_model TEXT,
+        plate_number TEXT,
+        seat_capacity INTEGER,
+        status TEXT DEFAULT "Active"
+    )`);
+    // Ensure drivers table has assigned_vehicle column
+    db.run("ALTER TABLE drivers ADD COLUMN assigned_vehicle_id INTEGER", (err) => {});
+}
+
+app.get("/api/vehicles", (req, res) => {
+    if (db && typeof db.all === "function") {
+        db.all("SELECT * FROM vehicles", (err, rows) => {
+            res.json(rows || []);
+        });
+    } else {
+        res.json([]);
+    }
+});
+
+app.post("/api/vehicles", (req, res) => {
+    const { make_model, plate_number, seat_capacity } = req.body;
+    if (db && typeof db.run === "function") {
+        db.run("INSERT INTO vehicles (make_model, plate_number, seat_capacity, status) VALUES (?, ?, ?, ?)",
+            [make_model || "Standard Car", plate_number || "UNKNOWN", seat_capacity || 4, "Active"],
+            function(err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ success: true, id: this.lastID });
+            }
+        );
+    } else {
+        res.status(500).json({ error: "Database not available" });
+    }
+});
+
+app.post("/api/drivers/:id/assign-vehicle", (req, res) => {
+    const driverId = req.params.id;
+    const { vehicleId } = req.body;
+    if (db && typeof db.run === "function") {
+        db.run("UPDATE drivers SET assigned_vehicle_id = ? WHERE id = ?", [vehicleId, driverId], (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, message: "Vehicle assigned successfully!" });
+        });
+    } else {
+        res.status(500).json({ error: "Database not available" });
+    }
+});
+// --- END FLEET API ---

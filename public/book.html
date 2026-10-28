@@ -390,8 +390,17 @@
                 else if (vClass === 'Minibus_7' || vClass === 'Minibus_8') mult += 0.60;
                 else if (vClass === 'Executive') mult += 0.70;
                 finalFare = (base * mult) + (viaCount * 5.00);
-                const detEl = document.getElementById('displayQuoteDetails');
-                if (detEl) detEl.textContent = '✈️ Fixed Airport: ' + airportMatch.name + ' (' + vClass + ')';
+                const isHeathrow = airportMatch.iataCode === "LHR" || (airportMatch.name && airportMatch.name.toLowerCase().includes("heathrow"));
+                const baselineMiles = isHeathrow ? 100 : 30;
+                if (miles > baselineMiles) {
+                    const extraMiles = miles - baselineMiles;
+                    const extraPerMileRate = parseFloat(activeTariff.tier2PerMile) || 1.80;
+                    finalFare += (extraMiles * extraPerMileRate * mult);
+                }
+                const detEl = document.getElementById("displayQuoteDetails");
+                if (detEl) {
+                    detEl.textContent = "✈️ Fixed Airport: " + airportMatch.name + " (" + vClass + ")" + (miles > baselineMiles ? " + Outside Area Surcharge" : "");
+                }
             } else {
                 // Exact formula from calculateProgressiveTariff in admin.html
                 const baseFee = parseFloat(activeTariff.baseFlagDrop) || 5.00;

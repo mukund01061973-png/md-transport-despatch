@@ -250,13 +250,9 @@ document.addEventListener("DOMContentLoaded", () => {
             <span class="brand-title" style="white-space:nowrap; font-weight:800; font-size:0.9rem; color:#38bdf8;">🚕 MD TRANSPORT MASTER DISPATCH</span>
 
             <!-- TENANT SELECTOR -->
-            <select id="tenantSelect" onchange="switchTenant()" style="width:130px; margin:0; padding:4px 6px; font-size:0.75rem; background:#0f172a; border:1px solid #0284c7; color:#38bdf8; font-weight:bold; border-radius:4px; cursor:pointer;">
-                <option value="ALL">🌐 All Areas / Network</option>
-                <option value="BA" selected>📍 Bath Fleet</option>
-                <option value="BS">📍 Bristol Fleet</option>
-                <option value="SN">📍 Swindon Fleet</option>
-                <option value="GL">📍 Gloucester Fleet</option>
-                <option value="W">📍 London Fleet</option>
+            <!-- TENANT SELECTOR -->
+            <select id="tenantSelect" style="width:130px; margin:0; padding:4px 6px; font-size:0.75rem; background:#0f172a; border:1px solid #0284c7; color:#38bdf8; font-weight:bold; border-radius:4px;" disabled>
+                <option value="MD-BATH" selected>📍 Bath Fleet</option>
             </select>
 
             <!-- TARIFFS & AIRPORTS DROPDOWN -->
