@@ -683,11 +683,12 @@ function broadcastPlotQueueRanks(targetPlotId) {
 
     // 2. Fetch all registered plots and compute driver headcount
     let allPlots = [];
-    try {
-      allPlots = db.prepare("SELECT name FROM plots ORDER BY name ASC").all();
-    } catch(e) {
-      allPlots = [{ name: "Larkhall" }, { name: "City Centre" }, { name: "Station" }, { name: "Oldfield Park" }, { name: "Weston" }];
-    }
+try {
+    allPlots = db.prepare("SELECT name, postcodeSector FROM plots ORDER BY name ASC").all();
+} catch (e) {
+    console.error("Error fetching plots:", e.message);
+    allPlots = []; // Safe empty array instead of hardcoded fake plots
+}
 
     const densities = allPlots.map(p => {
       const q = plotQueues[p.name] || [];
