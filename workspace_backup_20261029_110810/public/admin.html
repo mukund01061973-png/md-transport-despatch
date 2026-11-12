@@ -1,0 +1,3360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MD Transport Master Dispatch Control</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: #0b1120; color: #ffffff; margin: 0; padding: 0; font-size: 13px; }
+        
+        .app-menubar {
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            height: 42px;
+            position: sticky;
+            top: 0;
+            z-index: 500;
+        }
+        .menubar-left { display: flex; align-items: center; gap: 16px; }
+        .brand-title { color: #38bdf8; font-weight: 800; font-size: 0.95rem; letter-spacing: 0.5px; }
+
+        .menu-item { position: relative; }
+        .menu-btn { white-space: nowrap; font-size: 0.82rem; padding: 4px 8px; 
+            background: transparent;
+            color: #cbd5e1;
+            border: none;
+            padding: 8px 12px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            height: 32px;
+        }
+        .menu-btn:hover { background: #334155; color: #ffffff; }
+
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 36px;
+            left: 0;
+            background: #1e293b;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            min-width: 290px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+            z-index: 1000;
+            padding: 4px 0;
+        }
+        .dropdown-menu.show { display: block; }
+        .dropdown-item {
+            padding: 8px 14px;
+            color: #e2e8f0;
+            display: block;
+            cursor: pointer;
+            font-size: 0.82rem;
+            text-decoration: none;
+        }
+        .dropdown-item:hover { background: #0284c7; color: #ffffff; }
+
+        .workspace-container { padding: 12px 16px; }
+        .workspace-grid { display: grid; grid-template-columns: 440px 1fr; gap: 14px; }
+        .card { background: #1e293b; border-radius: 8px; padding: 14px; border: 1px solid #334155; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+
+        label { display: block; color: #94a3b8; margin-bottom: 3px; font-weight: 500; font-size: 0.76rem; }
+        input, select, textarea, button { width: 100%; padding: 7px 9px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #ffffff; margin-bottom: 8px; outline: none; font-size: 0.82rem; }
+        input:focus, select:focus, textarea:focus { border-color: #38bdf8; }
+
+        button { background: #0284c7; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.15s; }
+        button:hover { background: #0369a1; }
+        .btn-green { background: #10b981; } .btn-green:hover { background: #059669; }
+        .btn-red { background: #ef4444; } .btn-red:hover { background: #dc2626; }
+        .btn-orange { background: #f59e0b; color: #000; } .btn-orange:hover { background: #d97706; }
+        .btn-purple { background: #8b5cf6; } .btn-purple:hover { background: #7c3aed; }
+        .btn-blue { background: #0284c7; } .btn-blue:hover { background: #0369a1; }
+        .btn-pill { width: auto; padding: 3px 10px; border-radius: 16px; font-size: 0.72rem; border: 1px solid #334155; background: #0f172a; color: #94a3b8; display: inline-block; cursor: pointer; margin: 0; }
+        .btn-pill.active { background: #0284c7; color: #fff; border-color: #38bdf8; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 0.8rem; }
+        th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #334155; }
+        th { background-color: #0f172a; color: #38bdf8; font-weight: 600; }
+        .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; display: inline-block; }
+        .badge-green { background: #064e3b; color: #34d399; }
+        .badge-blue { background: #0c4a6e; color: #38bdf8; }
+        .badge-yellow { background: #78350f; color: #fde047; }
+        .badge-red { background: #7f1d1d; color: #fca5a5; }
+
+        #mapContainer { height: 230px; width: 100%; border-radius: 6px; border: 1px solid #334155; margin-bottom: 12px; }
+
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; justify-content: center; align-items: flex-start; padding: 20px; overflow-y: auto; }
+        .modal-card { background: #1e293b; border: 2px solid #38bdf8; border-radius: 10px; max-width: 900px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.9); margin-top: 15px; }
+
+        .typeahead-wrap { position: relative; width: 100%; }
+        .typeahead-list {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #0f172a;
+            border: 1px solid #38bdf8;
+            border-radius: 0 0 6px 6px;
+            max-height: 180px;
+            overflow-y: auto;
+            z-index: 1500;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.8);
+            margin-top: -6px;
+            padding: 0;
+            list-style: none;
+        }
+        .typeahead-item { padding: 8px 10px; font-size: 0.78rem; cursor: pointer; border-bottom: 1px solid #1e293b; color: #cbd5e1; }
+        .typeahead-item:hover { background: #0284c7; color: #ffffff; }
+
+        .timeline-item { border-left: 2px solid #38bdf8; padding-left: 12px; margin-bottom: 10px; position: relative; }
+        .timeline-item::before { content: ''; width: 8px; height: 8px; background: #38bdf8; border-radius: 50%; position: absolute; left: -5px; top: 4px; }
+    </style>
+
+<script>
+// === GLOBAL WINDOW CONTROLLER FOR MODALS & LEDGER BUTTONS ===
+window.openAppModal = function(id) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.style.display = 'flex';
+    } else {
+        console.warn('Modal not found:', id);
+    }
+};
+
+window.closeAppModal = function(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+};
+
+window.closeOverlayModal = function(event, id) {
+    if (event.target && event.target.id === id) {
+        window.closeAppModal(id);
+    }
+};
+
+window.openAmendModal = function(jobId) {
+    const job = (typeof allJobs !== 'undefined' && Array.isArray(allJobs) ? allJobs : []).find(j => String(j.id) === String(jobId));
+    if (!job) {
+        alert('Booking #' + jobId + ' not found.');
+        return;
+    }
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    setVal('amendJobId', job.id);
+    setVal('amendPassenger', job.passenger || '');
+    setVal('amendPhone', job.phone || '');
+    setVal('amendPickup', job.pickup || '');
+    setVal('amendDropoff', job.dropoff || '');
+    setVal('amendFare', job.fare || 0);
+    setVal('amendVehClass', job.vehicleClass || 'ANY');
+    setVal('amendNotes', job.notes || '');
+
+    const viasCont = document.getElementById('amendViasContainer');
+    if (viasCont) {
+        viasCont.innerHTML = '';
+        if (job.vias) {
+            try {
+                const parsed = typeof job.vias === 'string' && job.vias.startsWith('[') ? JSON.parse(job.vias) : [job.vias];
+                parsed.forEach(v => { if (v && typeof addAmendViaField === 'function') addAmendViaField(v); });
+            } catch(e) {}
+        }
+    }
+    window.openAppModal('modalAmendJob');
+};
+
+window.openReassignModal = function(jobId) {
+    const el = document.getElementById('reassignJobId');
+    if (el) el.value = jobId;
+    window.openAppModal('modalReassignJob');
+};
+
+window.openCancelModal = function(jobId) {
+    const el = document.getElementById('cancelJobId');
+    if (el) el.value = jobId;
+    window.openAppModal('modalCancelJob');
+};
+
+window.openTripHistoryModal = function(jobId) {
+    if (typeof socket !== 'undefined') {
+        socket.emit('admin_get_booking_audit', { jobId: jobId });
+    }
+    window.openAppModal('modalTripHistory');
+};
+
+window.recallJob = function(jobId) {
+    if (confirm('Reactivate / Recall booking #' + jobId + '?')) {
+        if (typeof socket !== 'undefined') {
+            socket.emit('admin_recall_job', { id: jobId });
+        }
+    }
+};
+</script>
+
+</head>
+<body>
+
+<!-- Admin Security Login Gate -->
+<div id="adminAuthOverlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#111;z-index:99999;display:flex;align-items:center;justify-content:center;font-family:sans-serif;color:#fff;">
+  <div style="background:#222;padding:30px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.5);width:320px;text-align:center;">
+    <h2 style="margin-bottom:20px;color:#f39c12;">MD Dispatch Login</h2>
+    <p style="font-size:14px;color:#aaa;margin-bottom:20px;">Enter password to access control panel.</p>
+    <input type="password" id="adminPassInput" placeholder="Password" style="width:100%;padding:10px;margin-bottom:15px;background:#333;border:1px solid #444;color:#fff;border-radius:4px;box-sizing:border-box;" />
+    <button onclick="checkAdminPass()" style="width:100%;padding:10px;background:#f39c12;border:none;color:#111;font-weight:bold;border-radius:4px;cursor:pointer;">Login</button>
+    <p id="authError" style="color:#e74c3c;font-size:12px;margin-top:10px;display:none;">Incorrect password. Please try again.</p>
+  </div>
+</div>
+<script>
+function checkAdminPass() {
+  const pass = document.getElementById("adminPassInput").value;
+  // Default password is admin123 (you can change this anytime in admin.html)
+  if (pass === "admin123") {
+    document.getElementById("adminAuthOverlay").style.display = "none";
+    localStorage.setItem("md_admin_authenticated", "true");
+  } else {
+    document.getElementById("authError").style.display = "block";
+  }
+}
+document.addEventListener("DOMContentLoaded", () => {
+  if (localStorage.getItem("md_admin_authenticated") === "true") {
+    document.getElementById("adminAuthOverlay").style.display = "none";
+  }
+  const input = document.getElementById("adminPassInput");
+  if (input) {
+    input.addEventListener("keypress", function(e) {
+      if (e.key === "Enter") checkAdminPass();
+    });
+  }
+});
+</script>
+
+
+            <!-- TOP MENU WITH MULTI-TENANT SWITCHER -->
+    <div class="app-menubar" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 12px; background: #0f172a; border-bottom: 1px solid #334155;">
+        <div class="menubar-left" style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
+            <span class="brand-title" style="white-space:nowrap; font-weight:800; font-size:0.9rem; color:#38bdf8;">🚕 MD TRANSPORT MASTER DISPATCH</span>
+
+            <!-- TENANT SELECTOR -->
+            <!-- TENANT SELECTOR -->
+            <select id="tenantSelect" style="width:130px; margin:0; padding:4px 6px; font-size:0.75rem; background:#0f172a; border:1px solid #0284c7; color:#38bdf8; font-weight:bold; border-radius:4px;" disabled>
+    <option value="MD-BATH" selected>📍 Bath Fleet</option>
+</select>
+
+            <!-- TARIFFS & AIRPORTS DROPDOWN -->
+            <div class="menu-item" style="position:relative;">
+                <button type="button" class="menu-btn" onclick="toggleMenu('menuTariffs', event)" style="font-size:0.78rem; padding:4px 8px; height:30px;">⚙️ Tariffs & Meter ▾</button>
+                <div id="menuTariffs" class="dropdown-menu">
+                    <div class="dropdown-item" onclick="openAppModal('modalTariff')">📊 Progressive Tariffs, Live Meter & Busy Surge</div>
+                    <div class="dropdown-item" onclick="openAppModal('modalAirports')">✈️ Airport Matrix (Fixed Routes & Uplifts)</div>
+                </div>
+            </div>
+
+            <!-- FLEET & STANDS DROPDOWN -->
+            <div class="menu-item" style="position:relative;">
+                <button type="button" class="menu-btn" onclick="toggleMenu('menuFleet', event)" style="font-size:0.78rem; padding:4px 8px; height:30px;">🚗 Fleet & Stands ▾</button>
+                <div id="menuFleet" class="dropdown-menu">
+                    <div class="dropdown-item" onclick="openAppModal('modalDrivers')">🚘 Driver Profiles & MOT/Badge Compliance</div>
+                    <div class="dropdown-item" onclick="openAppModal('modalPlots')">📍 Taxi Stands & FIFO Queues</div>
+                    <div class="dropdown-item" onclick="openDriverStatementModal()">📑 Driver Pay & Commission Statements</div>
+                </div>
+            </div>
+
+            <!-- CORPORATE DROPDOWN -->
+            <div class="menu-item" style="position:relative;">
+                <button type="button" class="menu-btn" onclick="toggleMenu('menuAccounts', event)" style="font-size:0.78rem; padding:4px 8px; height:30px;">🏢 Corporate ▾</button>
+                <div id="menuAccounts" class="dropdown-menu">
+                    <div class="dropdown-item" onclick="openAppModal('modalAccounts')">📑 Corporate Accounts & Billing</div>
+                    <div class="dropdown-item" onclick="openAppModal('modalInvoiceGenerator')">🧾 Generate Monthly Invoices</div>
+                </div>
+            </div>
+
+            <!-- SMS GATEWAY -->
+            <div class="menu-item">
+                <button type="button" class="menu-btn" onclick="openSmsSettingsModal()" style="font-size:0.78rem; padding:4px 8px; height:30px; background:#1e293b; border:1px solid #334155; color:#f8fafc; border-radius:4px;">📱 SMS</button>
+            </div>
+
+            <!-- STRIPE CARD GATEWAY -->
+            <div class="menu-item">
+                <button type="button" class="menu-btn" onclick="openPaymentSettingsModal()" style="font-size:0.78rem; padding:4px 10px; height:30px; background:#0284c7; border:1px solid #38bdf8; color:#ffffff; font-weight:bold; border-radius:4px;">💳 Stripe Card</button>
+            </div>
+        </div>
+
+        <div><span id="connStatus" class="badge badge-green">Connected Live</span></div>
+    </div>
+
+    <!-- MAIN CONSOLE -->
+    <div class="workspace-container">
+        <div class="workspace-grid">
+            
+            <!-- LEFT: DISPATCH DESK -->
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:6px; margin-bottom:8px;">
+                    <h3 style="margin:0; color:#38bdf8; font-size:0.95rem;">📝 Dispatch Desk</h3>
+                    <select id="pricingModeToggle" onchange="switchPricingMode()" style="width:190px; margin:0; padding:4px; font-size:0.75rem;">
+                        <option value="dynamic" selected>⚡ Progressive 3-Tier Distance</option>
+                        <option value="meter">⏱️ Live Pulse Meter</option>
+                        <option value="custom">✏️ Custom Fixed</option>
+                    </select>
+                </div>
+
+                
+                    <div id="splitBookingBanner" style="display:none; background:#1e293b; border:1px dashed #f59e0b; border-radius:6px; padding:10px; margin-bottom:8px; align-items:center; justify-content:space-between;">
+                        <div style="font-size:0.85rem; color:#fcd34d;">
+                            ⚠️ <strong>Large Group (<span id="splitPaxCount">7</span> Pax)</strong>: No large van available?
+                        </div>
+                        <button type="button" class="btn btn-sm" style="background:#f59e0b; color:#0f172a; font-weight:700; padding:4px 10px; cursor:pointer;" onclick="splitCurrentBooking()">
+                            ✂️ Split into 2 Standard Cars
+                        </button> <button type="button" class="btn-slate" onclick="openPaymentSettingsModal()" style="width:auto; padding:4px 10px; font-size:0.85rem; margin-left:4px;">💳 Stripe</button>
+                    </div>
+                    <form id="bookingForm" onsubmit="createJob(event)">
+                    <div class="grid-2">
+                        <div><label>Passenger Name:</label><input type="text" id="jobPassenger" placeholder="John Smith" required></div>
+                        <div><label>Phone Number:</label><input type="tel" id="jobPhone" placeholder="07795681747" required></div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div>
+                            <label>Payment Mode:</label>
+                            <select id="jobPayMethod">
+                                <option value="Cash">💵 Cash to Driver</option>
+                                <option value="Card in Car">💳 Card to Driver</option>
+                                <option value="Prepaid Online">🔒 Prepaid / Link</option>
+                                <option value="Corporate Account">🏢 Corporate Account</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Corporate Account:</label>
+                            <select id="jobAccountSelect" onchange="recalculateDispatchFare()">
+                                <option value="">-- None --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid-2" style="background:#0f172a; padding:6px; border-radius:6px; margin-bottom:6px; border:1px solid #334155;">
+                        <div>
+                            <label>🐾 Pet Passenger:</label>
+                            <select id="jobPetType" onchange="recalculateDispatchFare()" style="margin:0;">
+                                <option value="None">No Pets</option>
+                                <option value="Dog">Dog (+Surcharge)</option>
+                                <option value="Cat">Cat (+Surcharge)</option>
+                                <option value="GuideDog">Guide Dog (Free - Law)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Vehicle Category:</label>
+                            <select id="jobVehClass" onchange="recalculateDispatchFare()" style="margin:0;">
+                                <option value="ANY" selected>🚗 Any Vehicle (Standard Low Fare)</option>
+                                <option value="LOW_CAR">🚙 Low Car (Saloon / Estate Only)</option>
+                                <option value="Saloon">🚙 Saloon Car</option>
+                                <option value="Estate">📦 Estate Car (+10%)</option>
+                                <option value="MPV_6">👨‍👩‍👧‍👦 6-Seat MPV (+40%)</option>
+                                <option value="Minibus_7">🚐 7-Seat Minibus (+60%)</option>
+                                <option value="Minibus_8">🚐 8-Seat Minibus (+60%)</option>
+                                <option value="Executive">⭐ Executive VIP (+70%)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div>
+                            <label>Passengers:</label>
+                            <select id="jobPax" onchange="onPassengerCountChange()">
+                                <option value="1">1 Pax</option>
+                                <option value="4" selected>4 Pax</option>
+                                <option value="6">6 Pax</option>
+                                <option value="7">7 Pax</option>
+                                <option value="8">8 Pax</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px; margin-top:16px;">
+                            <input type="checkbox" id="jobStrictVeh" style="width:auto; margin:0;" onchange="recalculateDispatchFare()">
+                            <label for="jobStrictVeh" style="margin:0; font-size:0.75rem; color:#fde047;">Strict Vehicle Only</label>
+                        </div>
+                    </div>
+
+                    <label>Pickup Location:</label>
+                    <div class="typeahead-wrap">
+                        <input type="text" id="jobPickup" placeholder="e.g. Bath Spa Station or BA1 1SU" oninput="handleAddressTypeahead(this, 'pickupList')" onchange="recalculateDispatchFare()" autocomplete="off" required>
+                        <ul id="pickupList" class="typeahead-list"></ul>
+                    </div>
+
+                    <div id="viasContainer"></div>
+                    <button type="button" class="btn-orange" style="width:auto; padding:3px 8px; font-size:0.75rem; margin-bottom:6px;" onclick="addViaStopField()">+ Add Via Stop</button>
+
+                    <label>Destination Location:</label>
+                    <div class="typeahead-wrap">
+                        <input type="text" id="jobDropoff" placeholder="e.g. Heathrow Airport or BA1 6BA" oninput="handleAddressTypeahead(this, 'dropoffList')" onchange="recalculateDispatchFare()" autocomplete="off" required>
+                        <ul id="dropoffList" class="typeahead-list"></ul>
+                    </div>
+
+                    <label>Notes / Driver Instructions:</label>
+                    <input type="text" id="jobNotes" placeholder="e.g. Meet inside Costa">
+
+                    <div style="background:#0f172a; border:1px solid #0284c7; border-radius:6px; padding:6px 8px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-size:0.75rem; color:#94a3b8;" id="dispatchDistLabel">0.0 Miles (0 Vias)</span>
+                        <span style="font-size:0.75rem; color:#38bdf8; font-weight:bold;" id="dispatchPricingLabel">Progressive 3-Tier</span>
+                    </div>
+
+                    <label>Agreed Fare (£):</label>
+                    <input type="text" id="jobFare" value="15.00" required>
+
+                    <label>Assign Driver:</label>
+                    <select id="jobAssignDriver">
+                        <option value="UNASSIGNED">⚡ Auto-Match FIFO Queue (15s Cascade ➔ Bid Board)</option>
+                    </select>
+
+                    <button type="submit" class="btn-green" id="btnSubmitDispatch">⚡ Dispatch Booking</button>
+                </form>
+            </div>
+
+            <!-- RIGHT: LIVE LEDGER & MAP -->
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                <div class="card" style="padding:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <h3 style="margin:0; color:#38bdf8; font-size:0.92rem;">🗺️ Live Vehicle Map</h3>
+                    </div>
+                    <div id="mapContainer"></div>
+                </div>
+
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <h3 style="margin:0; color:#38bdf8; font-size:0.95rem;">📋 Live Booking Ledger</h3>
+                        <div style="display:flex; gap:4px;">
+                            <button type="button" class="btn-pill active" onclick="filterJobs('all', this)">All</button>
+                            <button type="button" class="btn-pill" onclick="filterJobs('active', this)">🟢 Active</button>
+                            <button type="button" class="btn-pill" onclick="filterJobs('completed', this)">✅ Completed</button>
+                            <button type="button" class="btn-pill" onclick="filterJobs('cancelled', this)">🛑 Cancelled</button>
+                        </div>
+                    </div>
+
+                    <div style="overflow-x:auto; max-height:280px; overflow-y:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Ref</th>
+                                    <th>Passenger</th>
+                                    <th>Route & Stops</th>
+                                    <th>Driver</th>
+                                    <th>Fare</th>
+                                    <th>Status</th>
+                                    <th style="text-align:center;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="jobsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL: MASTER TARIFF -->
+    
+    <!-- MODAL: SMS GATEWAY CONFIGURATION -->
+    <div id="modalSmsGateway" class="modal-overlay" onclick="closeOverlayModal(event, 'modalSmsGateway')">
+        <div class="modal-card" onclick="event.stopPropagation()" style="max-width:580px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">📱 SMS Gateway Settings (Twilio / Textlocal / Android)</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalSmsGateway')">✕</button>
+            </div>
+
+            <div>
+                <label style="color:#94a3b8; font-weight:bold;">Active SMS Provider:</label>
+                <select id="smsProviderSelect" onchange="onSmsProviderChange()" style="width:100%; margin-bottom:12px; background:#0f172a; color:#fff; border:1px solid #475569; padding:6px; border-radius:4px;">
+                    <option value="simulation">🧪 Simulation / Test Mode (Terminal Logs Only)</option>
+                    <option value="twilio">🌐 Twilio (Global / UK Industry Standard)</option>
+                    <option value="textlocal">🇬🇧 Textlocal (UK Dedicated Gateway)</option>
+                    <option value="android_gateway">📱 Local Android Gateway (Free SIM Webhook)</option>
+                </select>
+
+                <!-- TWILIO PANEL -->
+                <div id="panelTwilio" style="display:none; background:#0f172a; padding:10px; border-radius:6px; margin-bottom:12px; border:1px solid #334155;">
+                    <div style="margin-bottom:8px;">
+                        <label style="color:#94a3b8;">Twilio Account SID:</label>
+                        <input type="text" id="smsTwilioSid" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" style="width:100%; box-sizing:border-box;">
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="color:#94a3b8;">Twilio Auth Token:</label>
+                        <input type="password" id="smsTwilioToken" placeholder="Your Twilio auth token" style="width:100%; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="color:#94a3b8;">Sender Number or Alphanumeric ID (e.g. MD-TAXI or +44...):</label>
+                        <input type="text" id="smsTwilioSender" placeholder="MD-TAXI" style="width:100%; box-sizing:border-box;">
+                    </div>
+                </div>
+
+                <!-- TEXTLOCAL PANEL -->
+                <div id="panelTextlocal" style="display:none; background:#0f172a; padding:10px; border-radius:6px; margin-bottom:12px; border:1px solid #334155;">
+                    <div style="margin-bottom:8px;">
+                        <label style="color:#94a3b8;">Textlocal API Key:</label>
+                        <input type="password" id="smsTextlocalKey" placeholder="Paste your Textlocal API key" style="width:100%; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="color:#94a3b8;">Sender Name (Max 11 chars, e.g. MD TAXI):</label>
+                        <input type="text" id="smsTextlocalSender" placeholder="MD TAXI" maxlength="11" style="width:100%; box-sizing:border-box;">
+                    </div>
+                </div>
+
+                <!-- ANDROID GATEWAY PANEL -->
+                <div id="panelAndroid" style="display:none; background:#0f172a; padding:10px; border-radius:6px; margin-bottom:12px; border:1px solid #334155;">
+                    <div style="margin-bottom:8px;">
+                        <label style="color:#94a3b8;">Android Webhook URL:</label>
+                        <input type="text" id="smsAndroidUrl" placeholder="http://192.168.1.50:8080/v1/sms/send" style="width:100%; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="color:#94a3b8;">API Bearer Token (optional):</label>
+                        <input type="password" id="smsAndroidToken" placeholder="Secret Token" style="width:100%; box-sizing:border-box;">
+                    </div>
+                </div>
+
+                <!-- LIVE TEST SMS BAR -->
+                <div style="background:#0f172a; padding:10px; border-radius:6px; margin-bottom:14px; border:1px solid #334155; display:flex; gap:8px; align-items:flex-end;">
+                    <div style="flex:1;">
+                        <label style="color:#94a3b8;">Send Test SMS to UK Mobile:</label>
+                        <input type="text" id="smsTestPhone" placeholder="07700900123" style="width:100%; box-sizing:border-box; margin-bottom:0;">
+                    </div>
+                    <button type="button" class="btn-blue" onclick="sendSmsTestAction()" style="width:auto; padding:6px 14px; white-space:nowrap;">🚀 Send Test</button>
+                </div>
+
+                <!-- MODAL ACTIONS -->
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button type="button" class="btn-slate" onclick="closeAppModal('modalSmsGateway')" style="width:auto; padding:6px 14px;">Cancel</button>
+                    <button type="button" class="btn-green" onclick="saveSmsSettingsAction()" style="width:auto; padding:6px 18px; font-weight:bold;">💾 Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+<!-- ================= STRIPE PAYMENT GATEWAY MODAL ================= -->
+
+
+
+<!-- ================= STRIPE SETTINGS MODAL ================= -->
+<div id="modalStripeGateway" class="modal-overlay" onclick="closeOverlayModal(event, 'modalStripeGateway')">
+    <div class="modal-card" onclick="event.stopPropagation()" style="max-width: 580px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+            <h3 style="margin:0; color:#38bdf8;">💳 Stripe Online Payment Settings</h3>
+            <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalStripeGateway')">✕</button>
+        </div>
+        
+        <form onsubmit="savePaymentSettingsAction(event)">
+            <div style="margin-bottom:12px;">
+                <label style="color:#fde047; font-weight:bold; display:block; margin-bottom:4px;">Active Payment Mode:</label>
+                <select id="payActiveMode" onchange="onPaymentModeChange()" style="width:100%; padding:8px; border-radius:6px; background:#1e293b; color:#fff; border:1px solid #475569;">
+                    <option value="simulation">⚡ Simulation / Sandbox (Instant Pre-auth, No real card charge)</option>
+                    <option value="test">🧪 Stripe Test Mode (Requires pk_test / sk_test)</option>
+                    <option value="live">🔒 Stripe Live Production (Real Customer Card Payments)</option>
+                </select>
+            </div>
+
+            <div id="panelStripeKeys" style="display:none; background:#0f172a; padding:12px; border-radius:6px; border:1px solid #334155; margin-bottom:12px;">
+                <div style="margin-bottom:10px;">
+                    <label style="color:#94a3b8; font-size:0.85rem; display:block;">Publishable Key (pk_test / pk_live):</label>
+                    <input type="text" id="payPublishableKey" placeholder="pk_test_..." style="width:100%; padding:8px; border-radius:4px; background:#1e293b; color:#fff; border:1px solid #475569;">
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label style="color:#94a3b8; font-size:0.85rem; display:block;">Secret Key (sk_test / sk_live):</label>
+                    <input type="password" id="paySecretKey" placeholder="sk_test_..." style="width:100%; padding:8px; border-radius:4px; background:#1e293b; color:#fff; border:1px solid #475569;">
+                </div>
+                <div>
+                    <label style="color:#94a3b8; font-size:0.85rem; display:block;">Currency Code:</label>
+                    <input type="text" id="payCurrency" value="GBP" style="width:100px; padding:6px; border-radius:4px; background:#1e293b; color:#fff; border:1px solid #475569; text-transform:uppercase;">
+                </div>
+            </div>
+
+            <div style="font-size:0.8rem; color:#94a3b8; margin-bottom:14px; background:#1e293b; padding:8px; border-radius:4px;">
+                ℹ️ When <b>Simulation</b> is chosen, booking web customers can pre-authorize test rides without live Stripe API keys. Drivers and ledgers will immediately register the job as <b>Prepaid Online</b>.
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button type="button" class="btn-slate" onclick="closeAppModal('modalStripeGateway')" style="width:auto; padding:6px 14px;">Cancel</button>
+                <button type="submit" class="btn-green" style="width:auto; padding:6px 18px; font-weight:bold;">💾 Save Stripe Settings</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="modalTariff" class="modal-overlay" onclick="closeOverlayModal(event, 'modalTariff')">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">📊 Master Tariffs, Live Meter & Busy Time Surge</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalTariff')">✕</button>
+            </div>
+            
+            <form onsubmit="saveTariff(event)">
+                <h4 style="color:#fde047; margin:4px 0 8px 0;">1. Live Digital Pulse Meter Settings</h4>
+                <div class="grid-5">
+                    <div>
+                        <label>Default Mode:</label>
+                        <select id="tfDefaultPricingMode">
+                            <option value="dynamic" selected>⚡ Progressive Distance</option>
+                            <option value="meter">⏱️ Digital Pulse Meter</option>
+                        </select>
+                    </div>
+                    <div><label style="color:#34d399; font-weight:bold;">Meter Base Drop (£):</label><input type="number" step="0.05" id="tfMeterBaseFare" value="3.50" required></div>
+                    <div><label>Dist Pulse (Yards):</label><input type="number" id="tfPulseYard" value="176" required></div>
+                    <div><label>Dist Pulse Cost (£):</label><input type="number" step="0.01" id="tfPulseCost" value="0.20" required></div>
+                    <div><label>Time Pulse (Sec):</label><input type="number" id="tfPulseSec" value="45" required></div>
+                </div>
+
+                <div style="margin-top:6px;">
+                    <label style="color:#38bdf8; font-weight:bold;">Live Meter Vehicle Category Uplifts (0% - 100%):</label>
+                    <div class="grid-5">
+                        <div><label>Meter Estate (+%):</label><input type="number" id="tfMeterEstatePct" value="10" required></div>
+                        <div><label>Meter MPV 6 (+%):</label><input type="number" id="tfMeterMpvPct" value="40" required></div>
+                        <div><label>Meter Minibus 7 (+%):</label><input type="number" id="tfMeterMinibus7Pct" value="60" required></div>
+                        <div><label>Meter Minibus 8 (+%):</label><input type="number" id="tfMeterMinibus8Pct" value="60" required></div>
+                        <div><label>Meter Exec (+%):</label><input type="number" id="tfMeterExecPct" value="70" required></div>
+                    </div>
+                </div>
+
+                <hr style="border:0; border-top:1px solid #334155; margin:10px 0;">
+                <h4 style="color:#f59e0b; margin:6px 0;">2. Peak / Busy Time Surcharge & Surcharges</h4>
+                <div class="grid-5">
+                    <div><label style="color:#fde047; font-weight:bold;">⚡ Busy Surge (%):</label><input type="number" step="1" id="tfBusySurgePct" value="0" required></div>
+                    <div><label>Free Wait (Mins):</label><input type="number" id="tfFreeWaitMins" value="5" required></div>
+                    <div><label>Wait Rate (£/Min):</label><input type="number" step="0.05" id="tfWaitRate" value="0.35" required></div>
+                    <div><label>Stop-Over Fee (£):</label><input type="number" step="0.5" id="tfViaStopFee" value="5.00" required></div>
+                    <div><label>Pet Surcharge (£):</label><input type="number" step="0.5" id="tfPetSurcharge" value="6.00" required></div>
+                </div>
+
+                <hr style="border:0; border-top:1px solid #334155; margin:10px 0;">
+                <h4 style="color:#38bdf8; margin:6px 0;">3. Progressive Distance Engine Rates</h4>
+                <div class="grid-2">
+                    <div><label style="color:#34d399; font-weight:bold;">Distance Base Flag Drop (£):</label><input type="number" step="0.05" id="tfBaseFlagDrop" value="5.00" required></div>
+                    <div><label style="color:#34d399; font-weight:bold;">First Mile Rate (Mile 0 to 1) (£):</label><input type="number" step="0.05" id="tfFirstMileRate" value="2.00" required></div>
+                </div>
+
+                <div class="grid-3" style="margin-top:6px;">
+                    <div><label>Tier 1 (Miles 1 to 25) Rate (£/mi):</label><input type="number" step="0.05" id="tfTier1PerMile" value="2.00" required></div>
+                    <div><label>Tier 2 (Miles 25 to 50) Rate (£/mi):</label><input type="number" step="0.05" id="tfTier2PerMile" value="1.80" required></div>
+                    <div><label>Tier 3 (Miles Over 50) Rate (£/mi):</label><input type="number" step="0.05" id="tfTier3PerMile" value="1.50" required></div>
+                </div>
+
+                <div style="margin-top:6px;">
+                    <label style="color:#38bdf8; font-weight:bold;">Distance Vehicle Category Uplifts (0% - 100%):</label>
+                    <div class="grid-5">
+                        <div><label>Estate (+%):</label><input type="number" id="tfEstatePct" value="10" required></div>
+                        <div><label>MPV (+%):</label><input type="number" id="tfMpvPct" value="40" required></div>
+                        <div><label>Minibus 7 (+%):</label><input type="number" id="tfMinibus7Pct" value="60" required></div>
+                        <div><label>Minibus 8 (+%):</label><input type="number" id="tfMinibus8Pct" value="60" required></div>
+                        <div><label>Exec (+%):</label><input type="number" id="tfExecPct" value="70" required></div>
+                    </div>
+                </div>
+
+                <hr style="border:0; border-top:1px solid #334155; margin:12px 0;">
+                <h4 style="color:#38bdf8; margin:6px 0;">4. Airport Matrix Rate Uplifts (0% - 100%)</h4>
+                <div class="grid-5">
+                    <div><label>Airport Estate (+%):</label><input type="number" id="tfAirportEstatePct" value="10" required></div>
+                    <div><label>Airport MPV (+%):</label><input type="number" id="tfAirportMpvPct" value="45" required></div>
+                    <div><label>Airport Minibus 7 (+%):</label><input type="number" id="tfAirportMinibus7Pct" value="60" required></div>
+                    <div><label>Airport Minibus 8 (+%):</label><input type="number" id="tfAirportMinibus8Pct" value="60" required></div>
+                    <div><label>Airport Exec (+%):</label><input type="number" id="tfAirportExecPct" value="70" required></div>
+                </div>
+
+                <div style="margin-top: 15px; padding-bottom: 25px;">
+                    <button type="submit" class="btn-green" style="padding:12px; font-size:0.95rem;">💾 Save Complete Tariffs</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: DRIVER PROFILES WITH MOT / BADGE COMPLIANCE TRACKER -->
+    <div id="modalDrivers" class="modal-overlay" onclick="closeOverlayModal(event, 'modalDrivers')">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">🚗 Driver Roster & Document Compliance Tracker</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalDrivers')">✕</button>
+            </div>
+
+            <form onsubmit="saveDriver(event)" style="background:#0f172a; padding:12px; border-radius:6px; margin-bottom:14px; border:1px solid #334155;">
+                <h4 style="color:#fde047; margin:0 0 8px 0;">Register New Driver:</h4>
+                <div class="grid-4">
+                    <div><label>Callsign / ID:</label><input type="text" id="drvId" placeholder="e.g. UKUND" required></div>
+                    <div><label>Driver Full Name:</label><input type="text" id="drvName" placeholder="Mukund Desai" required></div>
+                    <div><label>Mobile Number:</label><input type="tel" id="drvPhone" placeholder="07795681747" required></div>
+                    <div><label>PIN (4 Digits):</label><input type="password" id="drvPin" placeholder="1234" required></div>
+                </div>
+                <div class="grid-4">
+                    <div><label>Vehicle Model:</label><input type="text" id="drvVehicle" placeholder="Hyundai i800" required></div>
+                    <div>
+                        <label>Vehicle Class:</label>
+                        <select id="drvClass">
+                            <option value="Saloon">Saloon</option>
+                            <option value="Estate">Estate</option>
+                            <option value="MPV_6">6-Seat MPV</option>
+                            <option value="Minibus_7">7-Seat Minibus</option>
+                            <option value="Minibus_8" selected>8-Seat Minibus</option>
+                            <option value="Executive">Executive VIP</option>
+                        </select>
+                    </div>
+                    <div><label>Max Pax:</label><input type="number" id="drvMaxPax" value="8" required></div>
+                    <div><label>Commission Cut (%):</label><input type="number" step="0.5" id="drvCommPct" value="20.0" required></div>
+                </div>
+                
+                <!-- COMPLIANCE DATES -->
+                <div class="grid-4" style="background:#1e293b; padding:8px; border-radius:6px; margin-bottom:8px; border:1px solid #334155;">
+                    <div><label style="color:#fde047;">PHV/Hackney Badge Expiry:</label><input type="date" id="drvBadgeExp" required></div>
+                    <div><label style="color:#fde047;">Vehicle MOT Expiry:</label><input type="date" id="drvMotExp" required></div>
+                    <div><label style="color:#fde047;">Insurance Policy Expiry:</label><input type="date" id="drvInsExp" required></div>
+                    <div><label>Pet Friendly:</label><select id="drvAcceptsPets"><option value="1" selected>Yes</option><option value="0">No</option></select></div>
+                </div>
+
+                <button type="submit" class="btn-green" style="margin:0;">➕ Register Driver & Track Compliance</button>
+            </form>
+
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Callsign</th>
+                            <th>Name</th>
+                            <th>Vehicle</th>
+                            <th>Class</th>
+                            <th>Badge Status</th>
+                            <th>MOT Status</th>
+                            <th>Insurance</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="driversTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: CORPORATE MONTHLY INVOICE GENERATOR -->
+    <div id="modalInvoiceGenerator" class="modal-overlay" onclick="closeOverlayModal(event, 'modalInvoiceGenerator')">
+        <div class="modal-card" onclick="event.stopPropagation()" style="max-width:850px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">🧾 Corporate Monthly Invoice Generator</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalInvoiceGenerator')">✕</button>
+            </div>
+            
+            <form onsubmit="generateInvoice(event)" style="background:#0f172a; padding:12px; border-radius:6px; margin-bottom:14px; border:1px solid #334155;">
+                <div class="grid-3">
+                    <div>
+                        <label>Corporate Account:</label>
+                        <select id="invAccountSelect" required></select>
+                    </div>
+                    <div><label>Start Date:</label><input type="date" id="invStartDate"></div>
+                    <div><label>End Date:</label><input type="date" id="invEndDate"></div>
+                </div>
+                <button type="submit" class="btn-green" style="width:auto; padding:8px 16px;">🧾 Generate Invoice</button>
+            </form>
+
+            <div id="invoiceRenderArea" style="display:none; background:#ffffff; color:#000000; padding:24px; border-radius:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #000; padding-bottom:12px; margin-bottom:16px;">
+                    <div>
+                        <h2 style="margin:0; color:#0284c7;">MD TRANSPORT FLEET LTD</h2>
+                        <small>Licensed Private Hire & Taxi Operators • Bath & Bristol</small><br>
+                        <small>Invoice Ref: <strong id="invRenderNum">INV-0000</strong></small>
+                    </div>
+                    <div style="text-align:right;">
+                        <h3 style="margin:0;">INVOICE</h3>
+                        <div>Date: <span id="invRenderDate">-</span></div>
+                        <div>Terms: <span id="invRenderTerms">30 Days Net</span></div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:16px;">
+                    <strong>INVOICE TO:</strong>
+                    <div id="invRenderClientCompany" style="font-size:1.1rem; font-weight:bold;">Company</div>
+                    <div id="invRenderClientAddress">Corporate Billing Address</div>
+                </div>
+
+                <table style="width:100%; border-collapse:collapse; margin-bottom:16px; color:#000;">
+                    <thead>
+                        <tr style="background:#f1f5f9; border-bottom:2px solid #94a3b8;">
+                            <th style="padding:6px; text-align:left; color:#000;">Date</th>
+                            <th style="padding:6px; text-align:left; color:#000;">Job #</th>
+                            <th style="padding:6px; text-align:left; color:#000;">Passenger</th>
+                            <th style="padding:6px; text-align:left; color:#000;">Route</th>
+                            <th style="padding:6px; text-align:right; color:#000;">Amount (£)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invRenderTableBody"></tbody>
+                </table>
+
+                <div style="display:flex; justify-content:flex-end; margin-bottom:20px;">
+                    <div style="width:260px; line-height:1.8;">
+                        <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><strong id="invRenderSubtotal">£0.00</strong></div>
+                        <div style="display:flex; justify-content:space-between;"><span>Account Discount:</span><strong id="invRenderDiscount">-£0.00</strong></div>
+                        <div style="display:flex; justify-content:space-between; font-size:1.2rem; border-top:2px solid #000; padding-top:4px;"><span>Total Due:</span><strong id="invRenderTotal">£0.00</strong></div>
+                    </div>
+                </div>
+
+                <button type="button" class="btn-purple" onclick="window.print()" style="padding:10px; font-size:0.95rem;">🖨️ Print / Save PDF Invoice</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: AIRPORT MATRIX CRUD -->
+    <div id="modalAirports" class="modal-overlay" onclick="closeOverlayModal(event, 'modalAirports')">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">✈️ Fixed Airport Tariff Matrix</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalAirports')">✕</button>
+            </div>
+            <form onsubmit="saveAirport(event)" style="background:#0f172a; padding:12px; border-radius:6px; margin-bottom:14px; border:1px solid #334155;">
+                <div class="grid-4">
+                    <div><label>Airport Name:</label><input type="text" id="airName" placeholder="Gatwick Airport" required></div>
+                    <div><label>IATA Code:</label><input type="text" id="airIata" placeholder="LGW"></div>
+                    <div><label>Keywords:</label><input type="text" id="airKeywords" placeholder="gatwick, lgw"></div>
+                    <div><label>Base Rate Saloon (£):</label><input type="number" step="0.5" id="airRate" placeholder="155.00" required></div>
+                </div>
+                <button type="submit" class="btn-green" style="margin:0; width:auto; padding:8px 16px;">➕ Add Airport Route</button>
+            </form>
+            <div style="overflow-x:auto;">
+                <table><thead><tr><th>Airport</th><th>IATA</th><th>Base (Saloon)</th><th>Estate</th><th>MPV 6</th><th>7-Seat</th><th>8-Seat</th><th>Exec</th><th>Action</th></tr></thead><tbody id="airportsTableBody">
+</tbody></table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: TAXI STANDS & PLOTS -->
+    <div id="modalPlots" class="modal-overlay" onclick="closeOverlayModal(event, 'modalPlots')">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">📍 Taxi Stands & FIFO Queues</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalPlots')">✕</button>
+            </div>
+            <form onsubmit="savePlot(event)" style="background:#0f172a; padding:12px; border-radius:6px; margin-bottom:14px; border:1px solid #334155;">
+                <div class="grid-3">
+                    <div><label>Stand Name:</label><input type="text" id="plotName" placeholder="Bath Spa Stand" required></div>
+                    <div><label>Code:</label><input type="text" id="plotCode" placeholder="STAND-SPA" required></div>
+                    <div><label>Postcode Area:</label><input type="text" id="plotPostcodeSector" placeholder="BA1 1" required></div>
+                </div>
+                <div class="grid-4">
+                    <div><label>Type:</label><select id="plotType"><option value="stand">🚕 Taxi Stand (FIFO Queue)</option><option value="sector">🏘️ Area Sector</option></select></div>
+                    <div><label>Radius (Meters):</label><input type="number" id="plotRadius" value="350" required></div>
+                    <div><label>Latitude:</label><input type="number" step="0.0001" id="plotLat" value="51.3776" required></div>
+                    <div><label>Longitude:</label><input type="number" step="0.0001" id="plotLng" value="-2.3571" required></div>
+                </div>
+                <button type="submit" class="btn-green" style="margin:0; width:auto; padding:8px 16px;">➕ Add Taxi Stand</button>
+            </form>
+            <div style="overflow-x:auto;">
+                <table><thead><tr><th>Code</th><th>Name</th><th>Postcode</th><th>Type</th><th>Radius</th><th>Queue</th><th>Action</th></tr></thead><tbody id="plotsTableBody"></tbody></table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: CORPORATE ACCOUNTS -->
+    <div id="modalAccounts" class="modal-overlay" onclick="closeOverlayModal(event, 'modalAccounts')">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">🏢 Corporate Accounts</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalAccounts')">✕</button>
+            </div>
+            <form onsubmit="saveCorporateAccount(event)" style="background:#0f172a; padding:12px; border-radius:6px; margin-bottom:14px; border:1px solid #334155;">
+                <div class="grid-3">
+                    <div><label>Account #:</label><input type="text" id="accNumber" placeholder="ACC-101" required></div>
+                    <div><label>Company Name:</label><input type="text" id="accCompany" placeholder="Apex Logistics" required></div>
+                    <div><label>Discount %:</label><input type="number" id="accDiscount" value="0.0" step="0.5"></div>
+                </div>
+                <div class="grid-2">
+                    <div><label>Billing Email:</label><input type="email" id="accEmail" placeholder="accounts@company.co.uk"></div>
+                    <div><label>Billing Address:</label><input type="text" id="accAddress" placeholder="Bath Business Park"></div>
+                </div>
+                <button type="submit" class="btn-green" style="margin:0; width:auto; padding:8px 16px;">➕ Save Corporate Account</button>
+            </form>
+            <div style="overflow-x:auto;">
+                <table><thead><tr><th>Ref</th><th>Company</th><th>Discount</th><th>Email</th><th>Actions</th></tr></thead><tbody id="accountsTableBody"></tbody></table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: DRIVER PAY STATEMENTS -->
+    <div id="modalDriverStatements" class="modal-overlay" onclick="closeOverlayModal(event, 'modalDriverStatements')">
+        <div class="modal-card" onclick="event.stopPropagation()" style="max-width:850px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">📑 Driver Pay & Commission Settlement Statement</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalDriverStatements')">✕</button>
+            </div>
+            
+            <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-bottom:12px;">
+                <div style="flex:1; min-width:180px;">
+                    <label>Select Driver:</label>
+                    <select id="stmtDriverSelect" onchange="fetchDriverStatement()" style="width:100%;"></select>
+                </div>
+                <div style="flex:1; min-width:160px;">
+                    <label>Period Preset:</label>
+                    <select id="stmtPeriodSelect" onchange="onStatementPeriodChange()" style="width:100%;">
+                        <option value="ALL" selected>All-Time Completed</option>
+                        <option value="THIS_WEEK">This Week (Mon-Sun)</option>
+                        <option value="LAST_WEEK">Last Week</option>
+                        <option value="THIS_MONTH">This Month</option>
+                        <option value="LAST_MONTH">Last Month</option>
+                        <option value="CUSTOM">Custom Date Range</option>
+                        
+                    </select>
+                </div>
+                <div id="stmtDateStartBox" style="display:none; width:135px;">
+                    <label>From:</label>
+                    <input type="date" id="stmtStartDate" onchange="fetchDriverStatement()" style="width:100%;" />
+                </div>
+                <div id="stmtDateEndBox" style="display:none; width:135px;">
+                    <label>To:</label>
+                    <input type="date" id="stmtEndDate" onchange="fetchDriverStatement()" style="width:100%;" />
+                </div>
+                <div>
+                    <button type="button" class="btn-purple" style="margin:0; padding:8px 14px; white-space:nowrap;" onclick="printDriverStatementDocument()">🖨️ Print Statement</button>
+                    <button type="button" class="btn btn-primary" style="margin:0 0 0 8px; padding:8px 14px; white-space:nowrap; background:#0284c7; border:1px solid #0369a1; font-weight:600;" onclick="printDriverInvoiceDocument()">🧾 Driver Tax Invoice</button> / PDF</button>
+                </div>
+            </div>
+
+            <div class="grid-4" style="margin-bottom:14px; text-align:center;">
+                <div class="card" style="margin:0; padding:10px; background:#0f172a;"><small style="color:#94a3b8;">Trips</small><div id="stmtTripCount" style="font-size:1.4rem; font-weight:bold; color:#38bdf8;">0</div></div>
+                <div class="card" style="margin:0; padding:10px; background:#0f172a;"><small style="color:#94a3b8;">Gross</small><div id="stmtGrossFare" style="font-size:1.4rem; font-weight:bold; color:#10b981;">£0.00</div></div>
+                <div class="card" style="margin:0; padding:10px; background:#0f172a;"><small style="color:#94a3b8;">Company (<span id="stmtCommPct">20</span>%)</small><div id="stmtCommOwed" style="font-size:1.4rem; font-weight:bold; color:#f59e0b;">£0.00</div></div>
+                <div class="card" style="margin:0; padding:10px; background:#0f172a;"><small style="color:#94a3b8;">Net Payout</small><div id="stmtNetBalance" style="font-size:1.4rem; font-weight:bold; color:#38bdf8;">£0.00</div></div>
+            </div>
+
+            <div style="overflow-x:auto; max-height:260px; overflow-y:auto;">
+                <table>
+                    <thead><tr><th>Job #</th><th>Date</th><th>Passenger</th><th>Route</th><th>Payment</th><th>Fare (£)</th></tr></thead>
+                    <tbody id="stmtJobsTableBody"><tr><td colspan="6" style="text-align:center; color:#64748b;">Select a driver to view settlement.</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: AMEND -->
+    <div id="modalAmendJob" class="modal-overlay" onclick="closeOverlayModal(event, 'modalAmendJob')">
+        <div class="modal-card" onclick="event.stopPropagation()" style="max-width:620px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">✏️ Amend Booking & Route Mid-Journey</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalAmendJob')">✕</button>
+            </div>
+            <form onsubmit="saveAmendedBooking(event)">
+                <input type="hidden" id="amendJobId">
+                <div class="grid-2">
+                    <div><label>Passenger Name:</label><input type="text" id="amendPassenger" required></div>
+                    <div><label>Phone Number:</label><input type="tel" id="amendPhone" required></div>
+                </div>
+                <label>Pickup Location:</label><input type="text" id="amendPickup" oninput="recalcAmendRoute()" required>
+                <label style="color:#fde047; font-weight:bold;">Via Stops:</label>
+                <div id="amendViasContainer"></div>
+                <button type="button" class="btn-orange" style="width:auto; padding:3px 8px; font-size:0.75rem; margin-bottom:8px;" onclick="addAmendViaField()">+ Add Stop</button>
+                <label>Destination Location:</label><input type="text" id="amendDropoff" oninput="recalcAmendRoute()" required>
+                <div class="grid-2">
+                    <div><label>Vehicle Class:</label><select id="amendVehClass"><option value="ANY">Any Vehicle</option><option value="Saloon">Saloon</option><option value="Estate">Estate</option><option value="MPV_6">MPV 6</option><option value="Minibus_7">Minibus 7</option><option value="Minibus_8">Minibus 8</option><option value="Executive">Exec</option></select></div>
+                    <div><label>Fare (£):</label><input type="number" step="0.5" id="amendFare" required></div>
+                </div>
+                <label>Reason / Note:</label><input type="text" id="amendNotes" placeholder="e.g. Passenger amended destination" required>
+                <button type="submit" class="btn-green" style="margin-top:6px;">💾 Save & Update Driver</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: TRIP LIFECYCLE HISTORY -->
+    <div id="modalTripHistory" class="modal-overlay" onclick="closeOverlayModal(event, 'modalTripHistory')">
+        <div class="modal-card" onclick="event.stopPropagation()" style="max-width:600px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;" id="histJobRef">📜 Trip Lifecycle History</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalTripHistory')">✕</button>
+            </div>
+            <div id="histJobOverview" style="background:#0f172a; padding:10px; border-radius:6px; margin-bottom:12px;"></div>
+            <div id="histTimeline" style="max-height:260px; overflow-y:auto; background:#0f172a; padding:12px; border-radius:6px;"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: REASSIGN -->
+    <div id="modalReassignJob" class="modal-overlay" onclick="closeOverlayModal(event, 'modalReassignJob')">
+        <div class="modal-card" onclick="event.stopPropagation()" style="max-width:500px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#fde047;">🔄 Reassign or Recall</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalReassignJob')">✕</button>
+            </div>
+            <form onsubmit="executeReassignment(event)">
+                <input type="hidden" id="reassignJobId">
+                <p style="color:#94a3b8; font-size:0.85rem;" id="reassignJobSummary">Job: -</p>
+                <label>Action:</label>
+                <select id="reassignActionType" onchange="toggleReassignOptions()">
+                    <option value="REASSIGN_DRIVER">Direct Reassign to Driver</option>
+                    <option value="RECALL_TO_BASE">Recall to Base</option>
+                </select>
+                <div id="reassignDriverSelectWrapper"><label>Select Driver:</label><select id="reassignTargetDriver"></select></div>
+                <label>Reason:</label><input type="text" id="reassignReason" placeholder="e.g. Driver requested break" required>
+                <button type="submit" class="btn-orange" style="margin-top:8px;">🔄 Confirm Action</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: CANCEL -->
+    <div id="modalCancelJob" class="modal-overlay" onclick="closeOverlayModal(event, 'modalCancelJob')">
+        <div class="modal-card" onclick="event.stopPropagation()" style="max-width:450px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#ef4444;">❌ Cancel Booking</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:3px 8px;" onclick="closeAppModal('modalCancelJob')">✕</button>
+            </div>
+            <form onsubmit="executeCancellation(event)">
+                <input type="hidden" id="cancelJobId">
+                <p id="cancelJobSummary" style="font-size:0.85rem; color:#94a3b8;">Are you sure?</p>
+                <label>Reason:</label><input type="text" id="cancelReason" placeholder="e.g. Passenger cancelled" required>
+                <button type="submit" class="btn-red" style="margin-top:8px;">❌ Confirm Cancellation</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        // Automatically sync initial fleet tenant on startup
+        setTimeout(() => { if (typeof switchTenant === 'function') switchTenant(); }, 200);
+        let allAccounts = [], allJobs = [], allDrivers = [], allPlots = [], allAirports = [];
+        let currentFilter = 'all';
+        let customPricingActive = false;
+        let dispatchCalculatedMiles = 0.0;
+        let map, driverMarkers = {};
+
+        // 1. MULTI-TENANT SWITCHER
+        function switchTenant() {
+            const sel = document.getElementById('tenantSelect');
+            let val = sel.value;
+            if (val === '__CUSTOM__') {
+                const customSector = prompt('Enter UK Postcode Sector Prefix (e.g. SP, TA, DT, OX, NW):', '');
+                if (customSector && customSector.trim()) {
+                    const clean = customSector.trim().toUpperCase();
+                    const opt = document.createElement('option');
+                    opt.value = clean;
+                    opt.textContent = '📍 ' + clean + ' Sector';
+                    sel.insertBefore(opt, sel.lastElementChild);
+                    sel.value = clean;
+                    val = clean;
+                } else {
+                    sel.value = 'ALL';
+                    val = 'ALL';
+                }
+            }
+            if (typeof socket !== 'undefined') {
+                socket.emit('set_tenant', val);
+            }
+        }
+
+        // 2. COMPLIANCE CHECK HELPER
+        function getComplianceBadge(dateStr) {
+            if (!dateStr) return '<span class="badge badge-yellow">No Record</span>';
+            const today = new Date();
+            const exp = new Date(dateStr);
+            const diffDays = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+
+            if (diffDays < 0) return `<span class="badge badge-red">EXPIRED (${dateStr})</span>`;
+            if (diffDays <= 30) return `<span class="badge badge-yellow">DUE (${diffDays}d)</span>`;
+            return `<span class="badge badge-green">VALID (${dateStr})</span>`;
+        }
+
+        // 3. PASSENGER LIVE TRACKING LINK
+        function openLiveTrackingLink(jobId) {
+            const trackUrl = `${window.location.origin}/track.html?job=${jobId}`;
+            window.open(trackUrl, '_blank');
+        }
+
+        // 4. CORPORATE INVOICE GENERATION
+        function generateInvoice(e) {
+            e.preventDefault();
+            const acc = document.getElementById('invAccountSelect').value;
+            const start = document.getElementById('invStartDate').value;
+            const end = document.getElementById('invEndDate').value;
+            socket.emit('generate_corporate_invoice', { accountNumber: acc, startDate: start, endDate: end });
+        }
+
+        socket.on('invoice_result', (res) => {
+            if (res.error) return alert('Invoice Error: ' + res.error);
+            document.getElementById('invoiceRenderArea').style.display = 'block';
+            document.getElementById('invRenderNum').textContent = res.invoiceNumber;
+            document.getElementById('invRenderDate').textContent = res.dateGenerated;
+            document.getElementById('invRenderTerms').textContent = res.account.paymentTerms || '30 Days Net';
+            document.getElementById('invRenderClientCompany').textContent = `${res.account.companyName} (${res.account.accountNumber})`;
+            document.getElementById('invRenderClientAddress').textContent = res.account.billingAddress || res.account.billingEmail || 'On Record';
+
+            const tbody = document.getElementById('invRenderTableBody');
+            tbody.innerHTML = '';
+            res.jobs.forEach(j => {
+                tbody.innerHTML += `
+                    <tr style="border-bottom:1px solid #cbd5e1;">
+                        <td style="padding:6px; color:#000;">${j.createdAt.split(' ')[0]}</td>
+                        <td style="padding:6px; color:#000;"><strong>${j.id}</strong></td>
+                        <td style="padding:6px; color:#000;">${j.passenger}</td>
+                        <td style="padding:6px; color:#000;"><small>${j.pickup} ➔ ${j.dropoff}</small></td>
+                        <td style="padding:6px; text-align:right; font-weight:bold; color:#000;">£${Number(j.fare).toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('invRenderSubtotal').textContent = `£${res.subtotal.toFixed(2)}`;
+            document.getElementById('invRenderDiscount').textContent = `-£${res.discount.toFixed(2)} (${res.account.discountPct}%)`;
+            document.getElementById('invRenderTotal').textContent = `£${res.totalDue.toFixed(2)}`;
+        });
+
+        // ADDRESS AUTOCOMPLETE
+        let typeaheadTimer = null;
+        // ================= COMMERCIAL UK ADDRESS & POSTCODE AUTO-RESOLVER =================
+        const UK_POSTCODE_REGEX = /^([A-Z]{1,2}[0-9][A-Z0-9]?)\s*([0-9][A-Z]{2})$/i;
+        const UK_PREMISE_POSTCODE_REGEX = /^([0-9A-Z\/\-]+)\s+([A-Z]{1,2}[0-9][A-Z0-9]?\s*[0-9][A-Z]{2})$/i;
+
+        async function resolveUkPostcode(premise, postcode) {
+            const cleanPostcode = postcode.replace(/\s+/g, "").toUpperCase();
+            try {
+                const pcRes = await fetch(`https://api.postcodes.io/postcodes/${cleanPostcode}`);
+                const pcJson = await pcRes.json();
+                if (pcJson.status === 200 && pcJson.result) {
+                    const r = pcJson.result;
+                    const lat = r.latitude;
+                    const lng = r.longitude;
+                    const formattedPc = r.postcode;
+                    const town = r.parish || r.admin_ward || "Bath";
+
+                    // Reverse-geocode to get the actual road name (e.g. Bay Tree Road, Grosvenor Place)
+                    let roadName = "";
+                    try {
+                        const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`);
+                        const revJson = await revRes.json();
+                        if (revJson && revJson.address) {
+                            roadName = revJson.address.road || revJson.address.pedestrian || revJson.address.residential || revJson.address.suburb || "";
+                        }
+                    } catch(e) {}
+
+                    const premisePrefix = premise ? (premise + " ") : "";
+                    const primaryLine = roadName ? `${premisePrefix}${roadName}` : `${premisePrefix}${formattedPc}`;
+                    const secondaryLine = `${town}, ${formattedPc}`;
+
+                    return [{
+                        primary: primaryLine,
+                        secondary: secondaryLine,
+                        fullAddress: `${primaryLine}, ${secondaryLine}`,
+                        lat: lat,
+                        lng: lng,
+                        postcode: formattedPc
+                    }];
+                }
+            } catch (err) {}
+            return [];
+        }
+
+        function handleAddressTypeahead(inputEl, listId) {
+            clearTimeout(typeaheadTimer);
+            const query = inputEl.value.trim();
+            const listEl = document.getElementById(listId);
+            if (!listEl) return;
+
+            if (query.length < 2) {
+                listEl.style.display = "none";
+                listEl.innerHTML = "";
+                return;
+            }
+
+            typeaheadTimer = setTimeout(async () => {
+                let suggestions = [];
+
+                // 1. FAST TIER: UK Postcode or Premise + Postcode (e.g. "BA1 1SU" or "14 BA1 1SU")
+                const premiseMatch = query.match(UK_PREMISE_POSTCODE_REGEX);
+                const pureMatch = query.match(UK_POSTCODE_REGEX);
+
+                if (premiseMatch) {
+                    const premise = premiseMatch[1];
+                    const pc = premiseMatch[2];
+                    suggestions = await resolveUkPostcode(premise, pc);
+                } else if (pureMatch) {
+                    suggestions = await resolveUkPostcode("", query);
+                }
+
+                // 2. THOROUGHFARE & PREMISE SEARCH (Nominatim GB Focused)
+                try {
+                    const searchRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=gb&addressdetails=1&limit=8&q=${encodeURIComponent(query)}`);
+                    const data = await searchRes.json();
+                    if (Array.isArray(data)) {
+                        data.forEach(item => {
+                            const addr = item.address || {};
+                            const road = addr.road || addr.pedestrian || addr.street || addr.industrial || "";
+                            const houseNum = addr.house_number || addr.building || "";
+                            const town = addr.town || addr.city || addr.suburb || addr.village || addr.county || "";
+                            const pc = addr.postcode || "";
+                            const poi = item.name && item.name !== road ? item.name : "";
+
+                            let firstLine = [houseNum, road || poi].filter(Boolean).join(" ");
+                            if (!firstLine) firstLine = item.display_name.split(",")[0] || query;
+
+                            let secondLine = [town, pc].filter(Boolean).join(", ");
+                            let completeAddress = [firstLine, secondLine].filter(Boolean).join(", ");
+
+                            // Avoid duplicates
+                            if (!suggestions.some(s => s.fullAddress.toLowerCase() === completeAddress.toLowerCase())) {
+                                suggestions.push({
+                                    primary: firstLine,
+                                    secondary: secondLine || "United Kingdom",
+                                    fullAddress: completeAddress,
+                                    lat: parseFloat(item.lat),
+                                    lng: parseFloat(item.lon),
+                                    postcode: pc
+                                });
+                            }
+                        });
+                    }
+                } catch(e) {}
+
+                if (!suggestions.length) {
+                    listEl.style.display = "none";
+                    return;
+                }
+
+                listEl.innerHTML = "";
+                suggestions.slice(0, 7).forEach(s => {
+                    const li = document.createElement("li");
+                    li.className = "typeahead-item";
+                    li.style.cssText = "padding:8px 12px; cursor:pointer; border-bottom:1px solid #334155; display:flex; flex-direction:column;";
+                    li.innerHTML = `
+                        <div style="font-weight:bold; color:#f8fafc; font-size:0.85rem;">${escapeHtml(s.primary)}</div>
+                        <div style="color:#94a3b8; font-size:0.75rem;">📍 ${escapeHtml(s.secondary)}</div>
+                    `;
+                    li.onmousedown = (e) => {
+                        e.preventDefault();
+                        inputEl.value = s.fullAddress;
+                        inputEl.dataset.lat = s.lat || "";
+                        inputEl.dataset.lng = s.lng || "";
+                        if (s.postcode) inputEl.dataset.postcode = s.postcode;
+                        listEl.style.display = "none";
+                        listEl.innerHTML = "";
+                        if (typeof triggerDispatchAutoRouting === "function") triggerDispatchAutoRouting();
+                    };
+                    listEl.appendChild(li);
+                });
+                listEl.style.display = "block";
+            }, 250);
+        }
+
+        document.addEventListener("click", (e) => {
+            if (!e.target.closest(".typeahead-wrap")) {
+                document.querySelectorAll(".typeahead-list").forEach(l => l.style.display = "none");
+            }
+        });
+
+        // ONE-CLICK RETURN TRIP
+        function cloneAsReturnJob(jobId) {
+            const j = allJobs.find(x => x.id === jobId);
+            if (!j) return;
+            document.getElementById('jobPassenger').value = j.passenger;
+            document.getElementById('jobPhone').value = j.phone;
+            document.getElementById('jobVehClass').value = j.vehicleClass || 'ANY';
+            document.getElementById('jobPax').value = j.passengers || 1;
+            document.getElementById('jobPayMethod').value = j.paymentMethod || 'Cash';
+            document.getElementById('jobAccountSelect').value = j.accountNumber || '';
+            document.getElementById('jobPickup').value = j.dropoff;
+            document.getElementById('jobDropoff').value = j.pickup;
+            document.getElementById('viasContainer').innerHTML = '';
+            document.getElementById('jobNotes').value = `Return trip for ${j.passenger}`;
+            triggerDispatchAutoRouting();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // DRIVER STATEMENTS
+        // === DRIVER STATEMENTS ENGINE ===
+let currentDriverStatementData = null;
+
+function onStatementPeriodChange() {
+    const period = document.getElementById("stmtPeriodSelect").value;
+    const startBox = document.getElementById("stmtDateStartBox");
+    const endBox = document.getElementById("stmtDateEndBox");
+    if (period === "CUSTOM") {
+        startBox.style.display = "block";
+        endBox.style.display = "block";
+    } else {
+        startBox.style.display = "none";
+        endBox.style.display = "none";
+    }
+    fetchDriverStatement();
+}
+
+function openDriverStatementModal() {
+    const sel = document.getElementById("stmtDriverSelect");
+    if (sel) {
+        sel.innerHTML = "";
+        allDrivers.forEach(d => {
+            sel.innerHTML += `<option value="${d.driverId}">${d.driverId} - ${d.name} (${d.vehicle || "Standard"})</option>`;
+        });
+    }
+    openAppModal("modalDriverStatements");
+    fetchDriverStatement();
+}
+
+function fetchDriverStatement() {
+    const sel = document.getElementById("stmtDriverSelect");
+    if (!sel || !sel.value) return;
+    const period = document.getElementById("stmtPeriodSelect") ? document.getElementById("stmtPeriodSelect").value : "ALL";
+    const startDate = document.getElementById("stmtStartDate") ? document.getElementById("stmtStartDate").value : "";
+    const endDate = document.getElementById("stmtEndDate") ? document.getElementById("stmtEndDate").value : "";
+
+    const tbody = document.getElementById("stmtJobsTableBody");
+    if (tbody) {
+        tbody.innerHTML = "<tr><td colspan=\"6\" style=\"text-align:center; color:#38bdf8; padding:20px;\">⏳ Calculating driver earnings & commission...</td></tr>";
+    }
+
+    socket.emit("get_driver_wallet", {
+        driverId: sel.value,
+        period: period,
+        startDate: startDate,
+        endDate: endDate
+    });
+}
+
+socket.on("driver_wallet_data", (data) => {
+    if (!data || !data.success) {
+        document.getElementById("stmtTripCount").innerText = "0";
+        document.getElementById("stmtGrossFare").innerText = "£0.00";
+        document.getElementById("stmtCommOwed").innerText = "£0.00";
+        document.getElementById("stmtNetBalance").innerText = "£0.00";
+        const tbody = document.getElementById("stmtJobsTableBody");
+        if (tbody) {
+            tbody.innerHTML = "<tr><td colspan=\"6\" style=\"text-align:center; color:#ef4444; padding:20px;\">No completed trips found for this driver in selected period.</td></tr>";
+        }
+        currentDriverStatementData = null;
+        return;
+    }
+
+    currentDriverStatementData = data;
+    document.getElementById("stmtTripCount").innerText = data.totalJobs || 0;
+    document.getElementById("stmtGrossFare").innerText = "£" + (data.gross || "0.00");
+    document.getElementById("stmtCommPct").innerText = data.commPct || "20";
+    document.getElementById("stmtCommOwed").innerText = "£" + (data.commission || "0.00");
+    document.getElementById("stmtNetBalance").innerText = "£" + (data.netPay || "0.00");
+
+    const tbody = document.getElementById("stmtJobsTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    const jobs = data.jobs || [];
+    if (jobs.length === 0) {
+        tbody.innerHTML = "<tr><td colspan=\"6\" style=\"text-align:center; color:#64748b; padding:20px;\">No completed trips recorded in this period.</td></tr>";
+        return;
+    }
+
+    jobs.forEach(j => {
+        const dateStr = j.createdAt ? new Date(j.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "-";
+        const isCash = (j.paymentMethod || "Cash").toUpperCase() === "CASH";
+        tbody.innerHTML += `
+            <tr>
+                <td><strong>#${j.id}</strong></td>
+                <td style="color:#94a3b8; font-size:0.8rem;">${dateStr}</td>
+                <td>${escapeHtml(j.passenger || "Passenger")}</td>
+                <td>${escapeHtml(j.pickup)} ➔ ${escapeHtml(j.dropoff)}</td>
+                <td><span class="badge ${isCash ? "badge-yellow" : "badge-blue"}">${escapeHtml(j.paymentMethod || "Cash")}</span></td>
+                <td style="font-weight:bold; color:#10b981;">£${parseFloat(j.fare || 0).toFixed(2)}</td>
+            </tr>
+        `;
+    });
+});
+
+function printDriverInvoiceDocument() {
+    if (!currentDriverStatementData || !currentDriverStatementData.jobs || currentDriverStatementData.jobs.length === 0) {
+        alert("Please select a driver with completed trips before generating an invoice.");
+        return;
+    }
+    const s = currentDriverStatementData;
+    const invWin = window.open("", "_blank", "width=850,height=900");
+    if (!invWin) {
+        alert("Please allow popups to view the driver invoice.");
+        return;
+    }
+
+    const driverName = s.driverName || (s.driver && s.driver.name) || s.driverId;
+    const invNumber = "INV-COMM-" + s.driverId + "-" + Date.now().toString().slice(-6);
+    const today = new Date().toLocaleDateString("en-GB");
+
+    const doc = `<!DOCTYPE html>
+    <html>
+    <head>
+        <title>Commission Invoice - ${invNumber}</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; color: #0f172a; margin: 24px 30px; background: #fff; }
+            .inv-header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+            .inv-title { font-size: 26px; font-weight: bold; color: #0f172a; margin: 0; }
+            .inv-meta { text-align: right; font-size: 13px; line-height: 1.6; }
+            .parties { display: flex; justify-content: space-between; margin-bottom: 18px; font-size: 12px; line-height: 1.4; }
+            .party-box { width: 45%; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; }
+            .party-title { font-weight: bold; font-size: 11px; text-transform: uppercase; color: #64748b; margin-bottom: 8px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+            th { background: #f1f5f9; text-align: left; padding: 10px 12px; font-size: 12px; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+            td { padding: 12px; font-size: 13px; border-bottom: 1px solid #e2e8f0; }
+            .totals { margin-left: auto; width: 350px; font-size: 13px; margin-bottom: 30px; }
+            .totals-row { display: flex; justify-content: space-between; padding: 6px 0; }
+            .totals-row.final { font-size: 16px; font-weight: bold; border-top: 2px solid #0f172a; padding-top: 10px; margin-top: 6px; }
+            .notice-box { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px; padding: 12px 16px; font-size: 12px; color: #9a3412; margin-bottom: 30px; }
+            .ftr { font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+        </style>
+    </head>
+    <body>
+        <div class="inv-header">
+            <div>
+                <h1 class="inv-title">TAX INVOICE</h1>
+                <div style="font-size:13px; color:#64748b; margin-top:4px;">MD TAXI DESPATCH MANAGEMENT LTD</div>
+            </div>
+            <div class="inv-meta">
+                <div><strong>Invoice No:</strong> ${invNumber}</div>
+                <div><strong>Invoice Date:</strong> ${today}</div>
+                <div><strong>Billing Period:</strong> ${s.period}</div>
+            </div>
+        </div>
+
+        <div class="parties">
+            <div class="party-box">
+                <div class="party-title">ISSUED BY (DISPATCH OPERATOR):</div>
+                <strong>MD Taxi Despatch Services Ltd</strong><br>
+                Bath, Somerset, BA1<br>
+                United Kingdom<br>
+                Email: accounts@mdtaxi.co.uk
+            </div>
+            <div class="party-box">
+                <div class="party-title">BILLED TO (DRIVER / CONTRACTOR):</div>
+                <strong>${driverName}</strong><br>
+                Driver Call-sign: <strong>${s.driverId}</strong><br>
+                Status: Self-Employed Driver Contractor<br>
+                Account Ref: DRV-ACC-${s.driverId}
+            </div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Service Description</th>
+                    <th style="text-align:center;">Trips</th>
+                    <th style="text-align:right;">Gross Bookings</th>
+                    <th style="text-align:right;">Rate</th>
+                    <th style="text-align:right;">Total Fee Due</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>
+                        <strong>Taxi Dispatch & Radio Booking Commission Fee</strong><br>
+                        <span style="font-size:11px; color:#64748b;">Despatch system handling, GPS telematics & customer acquisition</span>
+                    </td>
+                    <td style="text-align:center;">${s.totalJobs}</td>
+                    <td style="text-align:right;">£${s.gross}</td>
+                    <td style="text-align:right;">${s.commPct}%</td>
+                    <td style="text-align:right; font-weight:bold;">£${s.commission}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="totals" style="width: 440px; margin-left: auto; margin-bottom: 24px; font-size: 12.5px;">
+            <div class="totals-row" style="display:flex; justify-content:space-between; padding:3px 0; color:#64748b;">
+                <span>Total Cash Collected (Driver In-Hand):</span>
+                <span>£${s.cashTotal || '0.00'}</span>
+            </div>
+            <div class="totals-row" style="display:flex; justify-content:space-between; padding:3px 0; color:#64748b;">
+                <span>Total Prepaid Online (Office Held):</span>
+                <span>£${s.prepaidTotal || '0.00'}</span>
+            </div>
+            <div class="totals-row" style="display:flex; justify-content:space-between; padding:3px 0; color:#64748b;">
+                <span>Total Corporate Account (Office Billed):</span>
+                <span>£${s.accountTotal || '0.00'}</span>
+            </div>
+            ${parseFloat(s.tipsTotal || 0) > 0 ? `
+            <div class="totals-row" style="display:flex; justify-content:space-between; padding:3px 0; color:#059669; font-weight:600;">
+                <span>Driver Card/App Tips (100% to Driver):</span>
+                <span>+£${s.tipsTotal}</span>
+            </div>` : ''}
+            ${parseFloat(s.tollsTotal || 0) > 0 ? `
+            <div class="totals-row" style="display:flex; justify-content:space-between; padding:3px 0; color:#0284c7; font-weight:600;">
+                <span>Tolls & Parking Reimbursements:</span>
+                <span>+£${s.tollsTotal}</span>
+            </div>` : ''}
+            <div class="totals-row" style="display:flex; justify-content:space-between; padding:5px 0; font-weight:600; border-top:1px dashed #cbd5e1; border-bottom:1px dashed #cbd5e1; margin:5px 0;">
+                <span>Total Gross Fares (${s.totalJobs} Trips):</span>
+                <span>£${s.gross}</span>
+            </div>
+            <div class="totals-row" style="display:flex; justify-content:space-between; padding:4px 0;">
+                <span>Despatch Commission Fee (${s.commPct}% of Fares):</span>
+                <span style="font-weight:bold; color:#0f172a;">£${s.commission}</span>
+            </div>
+            <div class="totals-row" style="display:flex; justify-content:space-between; padding:4px 0; color:#0284c7;">
+                <span>LESS Office-Held Funds (Prepaid + Accounts):</span>
+                <span style="font-weight:bold;">-£${s.cardTotal || '0.00'}</span>
+            </div>
+            <div class="totals-row final" style="display:flex; justify-content:space-between; border-top:2px solid #0f172a; padding-top:8px; margin-top:6px; font-size:14px; font-weight:bold;">
+                <span>${s.settlementType === 'OFFICE_OWES_DRIVER' ? 'NET BALANCE DUE TO DRIVER:' : 'NET COMMISSION PAYABLE TO OFFICE:'}</span>
+                <span style="color:${s.settlementType === 'OFFICE_OWES_DRIVER' ? '#15803d' : '#c2410c'};">
+                    ${s.settlementType === 'OFFICE_OWES_DRIVER' ? '+£' : '£'}${s.settlement || '0.00'}
+                </span>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom: 25px;">
+            <div class="notice-box" style="margin:0;">
+                <strong>Payment & Remittance Terms:</strong><br>
+                ${parseFloat(s.cardTotal || 0) >= parseFloat(s.commission || 0) 
+                    ? 'The net surplus of online fares after deducting office commission has been scheduled for automated driver BACS transfer.' 
+                    : 'Commission owed exceeds prepaid fares held. Outstanding commission balance is due on or before weekly settlement day.'}
+            </div>
+            <div style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:12px 16px; font-size:12px; line-height:1.5; color:#1e293b;">
+                <strong style="text-transform:uppercase; font-size:11px; color:#475569;">Company Bank Settlement Details:</strong><br>
+                <div><strong>Bank:</strong> ${localStorage.getItem("cfg_bank_name") || "Barclays Bank UK PLC"}</div>
+                <div><strong>Account Name:</strong> ${localStorage.getItem("cfg_acc_name") || "MD Taxi Despatch Services Ltd"}</div>
+                <div><strong>Sort Code:</strong> ${localStorage.getItem("cfg_sort_code") || "20-05-00"}</div>
+                <div><strong>Account No:</strong> ${localStorage.getItem("cfg_acc_num") || "83920148"}</div>
+                <div><strong>Payment Ref:</strong> <span style="font-family:monospace; font-weight:bold; color:#0284c7;">${s.driverId}-SETTLE</span></div>
+            </div>
+        </div>
+
+        <div class="ftr">
+            MD Taxi Despatch Management System • VAT Registration: Exempt / Included under Flat-Rate Scheme • Official Record for HMRC Self-Assessment
+        </div>
+    </body>
+    </html>`;
+
+    invWin.document.open();
+    invWin.document.write(doc);
+    invWin.document.close();
+}
+
+function printDriverStatementDocument() {
+    if (!currentDriverStatementData || !currentDriverStatementData.jobs || currentDriverStatementData.jobs.length === 0) {
+        alert("Please select a driver with completed trips before printing.");
+        return;
+    }
+    const s = currentDriverStatementData;
+    const printWin = window.open("", "_blank", "width=900,height=950");
+    if (!printWin) {
+        alert("Please allow popups in your browser to print statements.");
+        return;
+    }
+
+    let rows = "";
+    s.jobs.forEach(j => {
+        let dt = j.dateTime || "";
+        if (!dt && j.completedAt) {
+            try {
+                const d = new Date(j.completedAt);
+                dt = !isNaN(d) ? d.toLocaleDateString("en-GB") + " " + d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : j.completedAt;
+            } catch(e) { dt = j.completedAt; }
+        }
+        if (!dt) dt = j.createdAt || "-";
+
+        rows += `
+            <tr style="border-bottom:1px solid #e2e8f0; font-size:12px;">
+                <td style="padding:6px 8px; font-weight:600;">#${j.id}</td>
+                <td style="padding:6px 8px; color:#475569;">${dt}</td>
+                <td style="padding:6px 8px;">${escapeHtml(j.pickup || "")} ➔ ${escapeHtml(j.dropoff || "Local Drop")}</td>
+                <td style="padding:6px 8px;">${escapeHtml(j.paymentMethod || "Cash")}</td>
+                <td style="padding:6px 8px; text-align:right; font-weight:bold;">£${parseFloat(j.fare || 0).toFixed(2)}</td>
+            </tr>
+        `;
+    });
+
+    const driverDisplayName = s.driverName || (s.driver && s.driver.name) || s.driverId || "Driver";
+    const periodDisplay = s.period || (typeof getSelectedPeriodLabel === "function" ? getSelectedPeriodLabel() : "Selected Period");
+
+    const doc = `<!DOCTYPE html>
+    <html>
+    <head>
+        <title>Driver Settlement - ${driverDisplayName} (${s.driverId})</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; color: #0f172a; margin: 30px; background: #fff; }
+            .hdr { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+            .hdr h1 { margin: 0; font-size: 22px; color: #0f172a; }
+            .meta-box { display: flex; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; }
+            .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+            .card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; text-align: center; background: #fafafa; }
+            .card .lbl { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 600; margin-bottom: 4px; }
+            .card .num { font-size: 20px; font-weight: bold; color: #0f172a; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th { background: #f1f5f9; text-align: left; padding: 8px; font-size: 11px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; color: #475569; }
+            .ftr { margin-top: 40px; font-size: 11px; color: #64748b; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 14px; }
+        </style>
+    </head>
+    <body>
+        <div class="hdr">
+            <div><h1>MD TAXI DESPATCH</h1><div style="font-size:12px; color:#64748b;">Driver Remittance & Settlement Statement</div></div>
+            <div style="text-align:right; font-size:12px;"><div><strong>Date:</strong> ${new Date().toLocaleDateString("en-GB")}</div><div>Ref: STMT-${s.driverId}-${Date.now().toString().slice(-6)}</div></div>
+        </div>
+        <div class="meta-box">
+            <div><strong>Driver:</strong> ${driverDisplayName} (${s.driverId})</div>
+            <div><strong>Period:</strong>${periodDisplay}</div>
+            <div><strong>Commission Rate:</strong> ${s.commPct}%</div>
+        </div>
+        <!-- SETTLEMENT SUMMARY CARDS -->
+        <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px;">
+            <div class="card"><div class="lbl">Trips</div><div class="num">${s.totalJobs}</div></div>
+            <div class="card"><div class="lbl">Gross Fares</div><div class="num">£${s.gross}</div></div>
+            <div class="card"><div class="lbl">Cash in Hand</div><div class="num" style="color:#0284c7;">£${s.cashTotal || "0.00"}</div></div>
+            <div class="card"><div class="lbl">Office Comm (${s.commPct}%)</div><div class="num" style="color:#d97706;">-£${s.commission}</div></div>
+            <div class="card" style="border: 2px solid ${s.settlementType === 'OFFICE_OWES_DRIVER' ? '#16a34a' : '#ea580c'}; background:${s.settlementType === 'OFFICE_OWES_DRIVER' ? '#f0fdf4' : '#fff7ed'};">
+                <div class="lbl" style="color:${s.settlementType === 'OFFICE_OWES_DRIVER' ? '#15803d' : '#c2410c'}; font-weight:bold;">
+                    ${s.settlementType === 'OFFICE_OWES_DRIVER' ? 'Office Owes Driver' : 'Driver Owes Office'}
+                </div>
+                <div class="num" style="color:${s.settlementType === 'OFFICE_OWES_DRIVER' ? '#15803d' : '#c2410c'};">
+                    ${s.settlementType === 'OFFICE_OWES_DRIVER' ? '+£' : '-£'}${s.settlement || '0.00'}
+                </div>
+            </div>
+        </div>
+        <table>
+            <thead><tr><th>Job #</th><th>Date/Time</th><th>Route</th><th>Payment</th><th style="text-align:right;">Fare</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+        <div class="ftr">MD Taxi Despatch Management System • All amounts in GBP (£) • For HMRC self-employment records</div>
+    
+    <!-- FLOATING BASE ⇄ DRIVER COMMS DRAWER -->
+    <div id="commsDrawer" style="position:fixed; bottom:20px; right:20px; width:340px; background:#0f172a; border:1px solid #334155; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:99999; display:none; flex-direction:column; overflow:hidden;">
+        <div style="background:#1e293b; padding:10px 14px; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-weight:bold; color:#38bdf8; font-size:0.9rem;">📻 Driver Comms Center</div>
+            <button onclick="toggleCommsDrawer()" style="background:transparent; border:none; color:#94a3b8; font-size:1.1rem; cursor:pointer;">✕</button>
+        </div>
+        <div id="commsMsgBox" style="height:240px; overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:8px; background:#020617; font-size:0.8rem;">
+            <div style="color:#64748b; text-align:center; margin-top:20px;">No messages received.</div>
+        </div>
+        <div style="padding:10px; background:#1e293b; border-top:1px solid #334155; display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; gap:6px;">
+                <select id="commsTargetDriver" style="flex:1; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px; padding:4px 6px; font-size:0.75rem;">
+                    <option value="ALL">📢 Broadcast ALL Drivers</option>
+                    <option value="MUKUND">MUKUND</option>
+                </select>
+            </div>
+            <div style="display:flex; gap:6px;">
+                <input type="text" id="commsInputText" placeholder="Type message or alert..." style="flex:1; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px; padding:6px 8px; font-size:0.8rem;" onkeydown="if(event.key==='Enter') sendDispatchComms()">
+                <button onclick="sendDispatchComms()" style="background:#0284c7; color:#fff; border:none; border-radius:4px; padding:6px 12px; font-weight:bold; cursor:pointer; font-size:0.8rem;">Send</button>
+            </div>
+        </div>
+    </div>
+    <button id="btnOpenComms" onclick="toggleCommsDrawer()" style="position:fixed; bottom:20px; right:20px; background:#0284c7; hover:background:#0369a1; color:#fff; border:none; border-radius:50px; padding:10px 18px; font-weight:bold; font-size:0.85rem; box-shadow:0 4px 14px rgba(2,132,199,0.4); cursor:pointer; z-index:99998; display:flex; align-items:center; gap:8px;">
+        📻 Driver Comms <span id="commsBadge" style="display:none; background:#ef4444; color:#fff; border-radius:10px; padding:1px 6px; font-size:0.7rem;">0</span>
+    </button>
+
+</body>
+    </html>`;
+
+    printWin.document.write(doc);
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => { printWin.print(); }, 250);
+}
+
+        function calculateProgressiveTariff(miles, vehicleClass = 'Saloon', numVias = 0, hasPet = false) {
+            const baseFee = parseFloat(document.getElementById('tfBaseFlagDrop').value) || 5.00;
+            const firstMileRate = parseFloat(document.getElementById('tfFirstMileRate').value) || 2.00;
+            const tier1Rate = parseFloat(document.getElementById('tfTier1PerMile').value) || 2.00;
+            const tier2Rate = parseFloat(document.getElementById('tfTier2PerMile').value) || 1.80;
+            const tier3Rate = parseFloat(document.getElementById('tfTier3PerMile').value) || 1.50;
+            const viaStopFee = parseFloat(document.getElementById('tfViaStopFee').value) || 5.00;
+            const petFee = parseFloat(document.getElementById('tfPetSurcharge').value) || 6.00;
+            const busySurgePct = parseFloat(document.getElementById('tfBusySurgePct').value) || 0.0;
+
+            let distanceCost = 0.0;
+            if (miles <= 0) return baseFee;
+
+            if (miles <= 25) {
+                distanceCost = (miles <= 1) ? firstMileRate * miles : firstMileRate + ((miles - 1) * tier1Rate);
+            } else if (miles <= 50) {
+                const tier1Total = firstMileRate + (24 * tier1Rate);
+                const tier2Miles = miles - 25;
+                distanceCost = tier1Total + (tier2Miles * tier2Rate);
+            } else {
+                const tier1Total = firstMileRate + (24 * tier1Rate);
+                const tier2Total = 25 * tier2Rate;
+                const tier3Miles = miles - 50;
+                distanceCost = tier1Total + tier2Total + (tier3Miles * tier3Rate);
+            }
+
+            let subtotal = baseFee + distanceCost;
+            let multiplier = 1.0;
+            if (vehicleClass === 'ANY' || vehicleClass === 'LOW_CAR' || vehicleClass === 'Saloon') multiplier = 1.0;
+            else if (vehicleClass === 'Estate') multiplier += (parseFloat(document.getElementById('tfEstatePct').value) || 10) / 100.0;
+            else if (vehicleClass === 'MPV_6') multiplier += (parseFloat(document.getElementById('tfMpvPct').value) || 40) / 100.0;
+            else if (vehicleClass === 'Minibus_7') multiplier += (parseFloat(document.getElementById('tfMinibus7Pct').value) || 60) / 100.0;
+            else if (vehicleClass === 'Minibus_8') multiplier += (parseFloat(document.getElementById('tfMinibus8Pct').value) || 60) / 100.0;
+            else if (vehicleClass === 'Executive') multiplier += (parseFloat(document.getElementById('tfExecPct').value) || 70) / 100.0;
+
+            let baseFare = (subtotal * multiplier) + (numVias * viaStopFee) + (hasPet ? petFee : 0);
+            if (busySurgePct > 0) baseFare = baseFare * (1 + (busySurgePct / 100.0));
+            return parseFloat(baseFare.toFixed(2));
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            map = L.map('mapContainer').setView([51.3776, -2.3571], 13);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+            // --- LIVE DRIVER PINPOINT ENGINE ---
+            socket.on('driver_pos_broadcast', function(data) {
+                if (!map || !data || !data.lat || !data.lng) return;
+                const id = data.driverId || 'UNKNOWN';
+                const lat = parseFloat(data.lat);
+                const lng = parseFloat(data.lng);
+                if (isNaN(lat) || isNaN(lng)) return;
+
+                const isBusy = (String(data.status || '').toUpperCase() !== 'AVAILABLE');
+                const color = isBusy ? '#f59e0b' : '#10b981';
+                const statusLabel = isBusy ? (data.status || 'ON JOB') : 'AVAILABLE';
+
+                const customIcon = L.divIcon({
+                    className: 'driver-pin-marker',
+                    html: `<div style="background:${color}; color:#fff; font-weight:800; font-size:11px; padding:3px 7px; border-radius:12px; border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,0.4); white-space:nowrap; text-align:center;">🚖 ${data.driverId || data.name}</div>`,
+                    iconSize: [60, 24],
+                    iconAnchor: [30, 12]
+                });
+
+                if (driverMarkers[id]) {
+                    driverMarkers[id].setLatLng([lat, lng]);
+                    driverMarkers[id].setIcon(customIcon);
+                    driverMarkers[id].setPopupContent(`<strong>${data.name || id} (${id})</strong><br>Status: <span style="color:${color}; font-weight:bold;">${statusLabel}</span><br>GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+                } else {
+                    const marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
+                    marker.bindPopup(`<strong>${data.name || id} (${id})</strong><br>Status: <span style="color:${color}; font-weight:bold;">${statusLabel}</span><br>GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+                    driverMarkers[id] = marker;
+                }
+            });
+        });
+
+        function toggleMenu(menuId, event) {
+            if (event) event.stopPropagation();
+            const target = document.getElementById(menuId);
+            const isOpen = target.classList.contains('show');
+            document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
+            if (!isOpen) target.classList.add('show');
+        }
+
+        window.addEventListener('click', (e) => {
+            if (!e.target.closest('.menu-item')) document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
+        });
+
+        window.openAppModal = function(id) {
+            document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'flex';
+        };
+
+        window.closeAppModal = function(id) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        };
+
+        window.closeOverlayModal = function(e, id) {
+            if (e && e.target && e.target.id === id) document.getElementById(id).style.display = 'none';
+        };
+
+        function switchPricingMode() {
+            const mode = document.getElementById('pricingModeToggle').value;
+            customPricingActive = (mode === 'custom');
+            recalculateDispatchFare();
+        }
+
+        function addViaStopField() {
+            const wrap = document.getElementById('viasContainer');
+            const count = wrap.querySelectorAll('.via-stop-row').length + 1;
+            const div = document.createElement('div');
+            div.className = 'via-stop-row';
+            div.style.marginBottom = '6px';
+            div.innerHTML = `
+                <label>Via Stop #${count}:</label>
+                <div style="display:flex; gap:4px;">
+                    <input type="text" class="via-input" placeholder="e.g. Combe Down" oninput="triggerDispatchAutoRouting()">
+                    <button type="button" class="btn-red" style="width:40px; margin:0;" onclick="this.closest('.via-stop-row').remove(); triggerDispatchAutoRouting();">✕</button>
+                </div>
+            `;
+            wrap.appendChild(div);
+            triggerDispatchAutoRouting();
+        }
+
+        function addAmendViaField(val = '') {
+            const wrap = document.getElementById('amendViasContainer');
+            const div = document.createElement('div');
+            div.className = 'amend-via-row';
+            div.style.marginBottom = '6px';
+            div.innerHTML = `
+                <div style="display:flex; gap:4px;">
+                    <input type="text" class="amend-via-input" value="${val}" placeholder="e.g. Combe Down" oninput="recalcAmendRoute()">
+                    <button type="button" class="btn-red" style="width:40px; margin:0;" onclick="this.closest('.amend-via-row').remove(); recalcAmendRoute();">✕</button>
+                </div>
+            `;
+            wrap.appendChild(div);
+            recalcAmendRoute();
+        }
+
+        socket.on('connect', () => {
+            document.getElementById('connStatus').textContent = 'Connected Live';
+            document.getElementById('connStatus').className = 'badge badge-green';
+            socket.emit('request_state');
+        });
+
+        socket.on('update_tariff', (t) => {
+            if (t) {
+                const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+                setVal('tfDefaultPricingMode', t.defaultLocalPricingMode || 'dynamic');
+                setVal('tfBusySurgePct', t.busySurgePct !== undefined ? t.busySurgePct : 0);
+
+                setVal('tfMeterBaseFare', t.meterBaseFare !== undefined ? t.meterBaseFare : 3.50);
+                setVal('tfPulseYard', t.meterDistancePulseYard || 176);
+                setVal('tfPulseCost', t.meterDistancePulseCost || 0.20);
+                setVal('tfPulseSec', t.meterTimePulseSeconds || 45);
+
+                setVal('tfMeterEstatePct', t.meterEstatePct !== undefined ? t.meterEstatePct : 10);
+                setVal('tfMeterMpvPct', t.meterMpvPct !== undefined ? t.meterMpvPct : 40);
+                setVal('tfMeterMinibus7Pct', t.meterMinibus7Pct !== undefined ? t.meterMinibus7Pct : 60);
+                setVal('tfMeterMinibus8Pct', t.meterMinibus8Pct !== undefined ? t.meterMinibus8Pct : 60);
+                setVal('tfMeterExecPct', t.meterExecPct !== undefined ? t.meterExecPct : 70);
+
+                setVal('tfBaseFlagDrop', t.baseFlagDrop !== undefined ? t.baseFlagDrop : 5.00);
+                setVal('tfFirstMileRate', t.firstMileRate !== undefined ? t.firstMileRate : 2.00);
+                setVal('tfTier1PerMile', t.tier1PerMile !== undefined ? t.tier1PerMile : 2.00);
+                setVal('tfTier2PerMile', t.tier2PerMile !== undefined ? t.tier2PerMile : 1.80);
+                setVal('tfTier3PerMile', t.tier3PerMile !== undefined ? t.tier3PerMile : 1.50);
+
+                setVal('tfFreeWaitMins', t.freeWaitMins || 5);
+                setVal('tfWaitRate', t.waitingRatePerMin || 0.35);
+                setVal('tfViaStopFee', t.viaStopFee || 5.00);
+                setVal('tfPetSurcharge', t.petSurcharge || 6.00);
+
+                setVal('tfEstatePct', ((t.estatePercent || 0.10) * 100).toFixed(0));
+                setVal('tfMpvPct', ((t.mpvPercent || 0.40) * 100).toFixed(0));
+                setVal('tfMinibus7Pct', ((t.minibus7Percent || 0.60) * 100).toFixed(0));
+                setVal('tfMinibus8Pct', ((t.minibus8Percent || 0.60) * 100).toFixed(0));
+                setVal('tfExecPct', ((t.execPercent || 0.70) * 100).toFixed(0));
+
+                setVal('tfAirportEstatePct', ((t.airportEstatePercent !== undefined ? t.airportEstatePercent : 0.10) * 100).toFixed(0));
+                setVal('tfAirportMpvPct', ((t.airportMpvPercent !== undefined ? t.airportMpvPercent : 0.45) * 100).toFixed(0));
+                setVal('tfAirportMinibus7Pct', ((t.airportMinibus7Percent !== undefined ? t.airportMinibus7Percent : 0.60) * 100).toFixed(0));
+                setVal('tfAirportMinibus8Pct', ((t.airportMinibus8Percent !== undefined ? t.airportMinibus8Percent : 0.60) * 100).toFixed(0));
+                setVal('tfAirportExecPct', ((t.airportExecPercent !== undefined ? t.airportExecPercent : 0.70) * 100).toFixed(0));
+
+                if (t.defaultLocalPricingMode) {
+                    document.getElementById('pricingModeToggle').value = t.defaultLocalPricingMode;
+                }
+                renderAirportsTable();
+                recalculateDispatchFare();
+            }
+        });
+
+        
+        // LISTEN TO DRIVERS LIST
+        socket.on('update_driver_list', (drivers) => {
+            allDrivers = drivers || [];
+            renderDriversTable();
+        });
+
+        function renderDriversTable() {
+            const tbody = document.getElementById('driversTableBody');
+            const sel = document.getElementById('jobAssignDriver');
+            const reassignSel = document.getElementById('reassignTargetDriver');
+            if (tbody) tbody.innerHTML = '';
+            if (sel) sel.innerHTML = '<option value="UNASSIGNED">⚡ Auto-Match FIFO Queue (15s Cascade ➔ Bid Board)</option>';
+            if (reassignSel) reassignSel.innerHTML = '';
+
+            allDrivers.forEach(d => {
+                const opt = `<option value="${d.driverId}">${d.driverId} - ${d.name} (${d.vehicleClass || 'Saloon'})</option>`;
+                if (sel) sel.innerHTML += opt;
+                if (reassignSel) reassignSel.innerHTML += opt;
+
+                if (tbody) {
+                    const isBlocked = d.status === 'Blocked' || d.accountStatus === 'BLOCKED';
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${escapeHtml(d.driverId)}</strong></td>
+                            <td>${escapeHtml(d.name)}</td>
+                            <td>${escapeHtml(d.vehicle || '-')}</td>
+                            <td>${escapeHtml(d.vehicleClass || 'Saloon')}</td>
+                            <td>${getComplianceBadge(d.badgeExpiry)}</td>
+                            <td>${getComplianceBadge(d.motExpiry)}</td>
+                            <td>${getComplianceBadge(d.insuranceExpiry)}</td>
+                            <td><span class="badge badge-${isBlocked ? 'red' : (d.status === 'Available' ? 'green' : 'yellow')}">${escapeHtml(d.status || 'Offline')}</span></td>
+                            <td style="white-space:nowrap; text-align:center;">
+                                <button type="button" class="btn-blue" style="width:auto; padding:2px 6px; font-size:0.75rem; margin:0 1px;" onclick="openEditDriverModal('${d.driverId}')" title="Amend Driver & Plate/Stand">✏️ Edit</button>
+                                <button type="button" class="btn-${isBlocked ? 'green' : 'red'}" style="width:auto; padding:2px 6px; font-size:0.75rem; margin:0 1px;" onclick="toggleDriverBlock('${d.driverId}')" title="${isBlocked ? 'Unblock Driver' : 'Block Driver'}">${isBlocked ? '✅ Unblock' : '🛑 Block'}</button>
+                            </td>
+                        </tr>
+                    `;
+                }
+            });
+        }
+
+        // LISTEN TO CORPORATE ACCOUNTS
+        socket.on('update_accounts', (accounts) => {
+            allAccounts = accounts || [];
+            renderAccountsTable();
+        });
+
+        function renderAccountsTable() {
+            const tbody = document.getElementById('accountsTableBody');
+            const sel = document.getElementById('jobAccountSelect');
+            const invSel = document.getElementById('invAccountSelect');
+            if (tbody) tbody.innerHTML = '';
+            if (sel) sel.innerHTML = '<option value="">-- None --</option>';
+            if (invSel) invSel.innerHTML = '';
+
+            allAccounts.forEach(a => {
+                const opt = `<option value="${a.accountNumber}">${a.accountNumber} - ${a.companyName} (${a.discountPct || 0}% off)</option>`;
+                if (sel) sel.innerHTML += opt;
+                if (invSel) invSel.innerHTML += opt;
+
+                if (tbody) {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${escapeHtml(a.accountNumber)}</strong></td>
+                            <td>${escapeHtml(a.companyName)}</td>
+                            <td>${parseFloat(a.discountPct || 0)}%</td>
+                            <td>${escapeHtml(a.email || a.billingEmail || '-')}</td>
+                            <td style="white-space:nowrap; text-align:center;">
+                                <button type="button" class="btn-blue" style="width:auto; padding:2px 6px; font-size:0.75rem; margin:0 1px;" onclick="openEditAccountModal('${a.accountNumber}')" title="Amend Account">✏️ Edit</button>
+                                <button type="button" class="btn-red" style="width:auto; padding:2px 6px; font-size:0.75rem; margin:0 1px;" onclick="deleteAccount('${a.accountNumber}')" title="Delete Account">🗑️</button>
+                            </td>
+                        </tr>
+                    `;
+                }
+            });
+        }
+
+        socket.on('update_airports', (airports) => {
+            allAirports = airports || [];
+            renderAirportsTable();
+        });
+
+        function renderAirportsTable() {
+            const tbody = document.getElementById('airportsTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            const airEstate = (parseFloat(document.getElementById('tfAirportEstatePct').value) || 10) / 100.0;
+            const airMpv = (parseFloat(document.getElementById('tfAirportMpvPct').value) || 45) / 100.0;
+            const airVan7 = (parseFloat(document.getElementById('tfAirportMinibus7Pct').value) || 60) / 100.0;
+            const airVan8 = (parseFloat(document.getElementById('tfAirportMinibus8Pct').value) || 60) / 100.0;
+            const airExec = (parseFloat(document.getElementById('tfAirportExecPct').value) || 70) / 100.0;
+
+            allAirports.forEach(a => {
+                const base = parseFloat(a.baseRate || a.baseFare || 0);
+                tbody.innerHTML += `
+                    <tr>
+                        <td><strong>${escapeHtml(a.name)}</strong></td>
+                        <td><span class="badge badge-blue">${escapeHtml(a.iataCode || '')}</span></td>
+                        <td><strong>£${base.toFixed(2)}</strong></td>
+                        <td>£${(base * (1 + airEstate)).toFixed(2)}</td>
+                        <td>£${(base * (1 + airMpv)).toFixed(2)}</td>
+                        <td>£${(base * (1 + airVan7)).toFixed(2)}</td>
+                        <td>£${(base * (1 + airVan8)).toFixed(2)}</td>
+                        <td>£${(base * (1 + airExec)).toFixed(2)}</td>
+                        <td style="white-space:nowrap; text-align:center;">
+                            <button type="button" class="btn-blue" style="width:auto; padding:2px 6px; font-size:0.75rem; margin:0 1px;" onclick="openEditAirportModal('${a.id}')" title="Amend Rate">✏️ Edit</button>
+                            <button type="button" class="btn-red" style="width:auto; padding:2px 6px; font-size:0.75rem; margin:0 1px;" onclick="deleteAirport('${a.id}')" title="Delete">🗑️</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        socket.on('update_jobs_list', (jobs) => {
+            allJobs = jobs || [];
+            renderJobsTable();
+        });
+
+        
+        function formatDateTime(dtStr) {
+            if (!dtStr) return '-';
+            try {
+                // If it's already "YYYY-MM-DD HH:MM:SS"
+                if (typeof dtStr === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dtStr)) {
+                    const parts = dtStr.split(/[- :T]/);
+                    if (parts.length >= 5) {
+                        return `${parts[2]}/${parts[1]}/${parts[0]} ${parts[3]}:${parts[4]}`;
+                    }
+                }
+                const d = new Date(dtStr);
+                if (isNaN(d.getTime())) return String(dtStr);
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const year = d.getFullYear();
+                const hours = String(d.getHours()).padStart(2, '0');
+                const mins = String(d.getMinutes()).padStart(2, '0');
+                return `${day}/${month}/${year} ${hours}:${mins}`;
+            } catch(e) {
+                return String(dtStr);
+            }
+        }
+  
+        function filterJobs(filter, btn) {
+            currentFilter = filter;
+            document.querySelectorAll('.btn-pill').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            renderJobsTable();
+        }
+
+        function renderJobsTable() {
+            if (Array.isArray(allJobs)) {
+                allJobs.sort((a, b) => {
+                    // Try parsing full ISO/standard date strings first
+                    const tA = a.createdAt ? Date.parse(a.createdAt) : NaN;
+                    const tB = b.createdAt ? Date.parse(b.createdAt) : NaN;
+                    if (!isNaN(tA) && !isNaN(tB) && tA !== tB) {
+                        return tB - tA; // Newest date first
+                    }
+
+                    // Numeric ID extraction fallback if rowids or numeric sequences exist
+                    const numA = parseInt(String(a.rowid || a.id || '').replace(/\D/g, ''), 10);
+                    const numB = parseInt(String(b.rowid || b.id || '').replace(/\D/g, ''), 10);
+                    if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+                        return numB - numA;
+                    }
+                    return 0;
+                });
+            }
+
+            const tbody = document.getElementById('jobsTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            const filtered = (allJobs || []).filter(j => {
+                const s = String(j.status || '').toUpperCase();
+                if (currentFilter === 'active') return ['ACCEPTED', 'ARRIVED', 'POB', 'PENDING', 'OFFERED', 'OPEN FOR BIDDING', 'UNASSIGNED', 'QUEUED'].includes(s);
+                if (currentFilter === 'completed') return s === 'COMPLETED';
+                if (currentFilter === 'cancelled') return s === 'CANCELLED';
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#64748b; padding:16px;">No bookings found.</td></tr>';
+                return;
+            }
+
+            filtered.forEach(job => {
+                const tr = document.createElement('tr');
+                const st = String(job.status || 'Pending').toUpperCase();
+                const isActive = (st !== 'COMPLETED' && st !== 'CANCELLED');
+                const statusColor = st === 'COMPLETED' ? '#4ade80' : 
+                                    st === 'CANCELLED' ? '#ef4444' : 
+                                    st === 'POB' ? '#f59e0b' : (st === 'OFFERED' ? '#eab308' : (st === 'OPEN FOR BIDDING' ? '#a855f7' : '#38bdf8'));
+
+                let driverBadge = '<span style="color:#64748b;">Unassigned</span>';
+                if (job.assignedDriverId) {
+                    driverBadge = `<span style="color:#38bdf8; font-weight:bold;">${escapeHtml(job.assignedDriverId)}</span>`;
+                }
+
+                // Format display date: show date + time if available, otherwise show clean time
+                let displayTime = job.createdAt || '-';
+                if (job.createdAt && job.createdAt.includes('T')) {
+                    const d = new Date(job.createdAt);
+                    if (!isNaN(d.getTime())) {
+                        const day = String(d.getDate()).padStart(2, '0');
+                        const mon = String(d.getMonth() + 1).padStart(2, '0');
+                        const yr = d.getFullYear();
+                        const hr = String(d.getHours()).padStart(2, '0');
+                        const min = String(d.getMinutes()).padStart(2, '0');
+                        displayTime = `${day}/${mon}/${yr} ${hr}:${min}`;
+                    }
+                }
+
+                tr.innerHTML = `
+                    <td>
+                        <strong>#${job.id}</strong><br>
+                        <span style="font-size:0.75rem; color:#94a3b8; white-space:nowrap;">📅 ${escapeHtml(displayTime)}</span>
+                    </td>
+                    <td>
+                        <strong>${escapeHtml(job.passenger || 'Guest')}</strong><br>
+                        <span style="font-size:0.75rem; color:#cbd5e1;">${escapeHtml(job.phone || '-')}</span>
+                        ${job.paymentMethod ? `<span style="display:inline-block; margin-left:4px; font-size:0.7rem; background:#334155; padding:1px 5px; border-radius:3px;">${escapeHtml(job.paymentMethod)}</span>` : ''}
+                    </td>
+                    <td style="font-size:0.85rem;">
+                        <div>📍 ${escapeHtml(job.pickup || '-')}</div>
+                        <div style="color:#94a3b8;">🏁 ${escapeHtml(job.dropoff || '-')}</div>
+                    </td>
+                    <td>${driverBadge}</td>
+                    <td><strong style="color:#34d399;">£${(parseFloat(job.fare) || 0).toFixed(2)}</strong></td>
+                    <td><span style="display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold; background:#1e293b; color:${statusColor}; border:1px solid ${statusColor};">${escapeHtml(job.status || 'Pending')}</span></td>
+                    <td style="white-space:nowrap; text-align:right; padding:4px 8px;">
+    <div style="display:inline-flex; gap:3px; align-items:center;">
+        <button type="button" style="background:#2563eb; color:#fff; border:none; border-radius:4px; padding:3px 7px; font-size:0.75rem; cursor:pointer;" onclick="openAmendModal('${job.id}')" title="Amend Booking">✏️</button>
+        ${(isActive && job.assignedDriverId) 
+            ? `<button type="button" style="background:#d97706; color:#fff; border:none; border-radius:4px; padding:3px 7px; font-size:0.75rem; cursor:pointer;" onclick="recallJob('${job.id}')" title="Recall Job">↩️</button>
+               <button type="button" style="background:#0284c7; color:#fff; border:none; border-radius:4px; padding:3px 7px; font-size:0.75rem; cursor:pointer;" onclick="forceCompleteJob('${job.id}')" title="Complete Job">🏁</button>`
+            : `<button type="button" style="background:#059669; color:#fff; border:none; border-radius:4px; padding:3px 7px; font-size:0.75rem; cursor:pointer;" onclick="openReassignModal('${job.id}')" title="Dispatch / Assign">🚀</button>`}
+        ${isActive ? `<button type="button" style="background:#dc2626; color:#fff; border:none; border-radius:4px; padding:3px 7px; font-size:0.75rem; cursor:pointer;" onclick="openCancelModal('${job.id}')" title="Cancel Booking">🛑</button>` : ''}
+        <button type="button" style="background:#475569; color:#fff; border:none; border-radius:4px; padding:3px 7px; font-size:0.75rem; cursor:pointer;" onclick="openTripHistoryModal('${job.id}')" title="Audit Trail">📜</button>
+    </div>
+</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        
+        window.forceCompleteJob = function(jobId) {
+            if (!confirm("Are you sure you want to manually mark Job #" + jobId + " as COMPLETED?")) return;
+            socket.emit("update_trip_status", {
+                jobId: jobId,
+                status: "COMPLETED",
+                fare: null
+            });
+            // Instant local state update for zero lag
+            const j = (allJobs || []).find(x => String(x.id) === String(jobId));
+            if (j) { j.status = "Completed"; }
+            renderJobsTable();
+        };
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        }
+
+        // --- AMEND MODAL HANDLERS ---
+        
+        // === AIRPORT MATRIX CRUD ===
+        function openEditAirportModal(id) {
+            const a = allAirports.find(x => x.id == id);
+            if (!a) return;
+            document.getElementById('editAirportId').value = a.id;
+            document.getElementById('editAirportName').value = a.name;
+            document.getElementById('editAirportIata').value = a.iataCode;
+            document.getElementById('editAirportBase').value = a.baseRate;
+            document.getElementById('editAirportKeywords').value = a.keywords || '';
+            openAppModal('modalEditAirport');
+        }
+
+        function saveEditedAirport(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            const idVal = parseInt(document.getElementById('editAirportId').value);
+            const nameVal = document.getElementById('editAirportName').value.trim();
+            const iataVal = document.getElementById('editAirportIata').value.trim().toUpperCase();
+            const baseInput = document.getElementById('editAirportBase');
+            const rateVal = parseFloat(baseInput ? baseInput.value : 0);
+
+            if (isNaN(rateVal)) {
+                alert('Please enter a valid numeric base price.');
+                return;
+            }
+
+            socket.emit('admin_update_airport', {
+                id: idVal,
+                name: nameVal,
+                iataCode: iataVal,
+                baseRate: rateVal
+            });
+
+            closeAppModal('modalEditAirport');
+        }
+
+        function deleteAirport(id) {
+            if (confirm('Are you sure you want to delete this airport?')) {
+                socket.emit('admin_delete_airport', id);
+            }
+        }
+
+        // === DRIVER FLEET CRUD ===
+        function openEditDriverModal(driverId) {
+            const d = allDrivers.find(x => x.driverId == driverId);
+            if (!d) return;
+            document.getElementById('editDriverId').value = d.driverId;
+            document.getElementById('editDriverName').value = d.name || '';
+            document.getElementById('editDriverPhone').value = d.phone || '';
+            document.getElementById('editDriverVehicle').value = d.vehicle || '';
+            document.getElementById('editDriverVehClass').value = d.vehicleClass || 'Saloon';
+            document.getElementById('editDriverComm').value = d.customCommissionPct !== undefined ? d.customCommissionPct : 20;
+            document.getElementById('editDriverBadge').value = d.badgeExpiry || '';
+            document.getElementById('editDriverMot').value = d.motExpiry || '';
+            document.getElementById('editDriverIns').value = d.insuranceExpiry || '';
+            openAppModal('modalEditDriver');
+        }
+
+        function saveEditedDriver(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            socket.emit('admin_update_driver', {
+                driverId: document.getElementById('editDriverId').value,
+                name: document.getElementById('editDriverName').value.trim(),
+                phone: document.getElementById('editDriverPhone').value.trim(),
+                vehicle: document.getElementById('editDriverVehicle').value.trim(),
+                vehicleClass: document.getElementById('editDriverVehClass').value,
+                customCommissionPct: parseFloat(document.getElementById('editDriverComm').value) || 20,
+                badgeExpiry: document.getElementById('editDriverBadge').value,
+                motExpiry: document.getElementById('editDriverMot').value,
+                insuranceExpiry: document.getElementById('editDriverIns').value
+            });
+            closeAppModal('modalEditDriver');
+            return false;
+        }
+
+        function toggleDriverBlock(driverId) {
+            if (confirm(`Toggle status / block for driver ${driverId}?`)) {
+                socket.emit('admin_toggle_driver_block', { driverId });
+            }
+        }
+
+        // === CORPORATE ACCOUNT CRUD ===
+        function openEditAccountModal(accountNumber) {
+            const a = allAccounts.find(x => x.accountNumber == accountNumber);
+            if (!a) return;
+            document.getElementById('editAccountNum').value = a.accountNumber;
+            document.getElementById('editAccountCompany').value = a.companyName;
+            document.getElementById('editAccountDiscount').value = a.discountPct || 0;
+            document.getElementById('editAccountTerms').value = a.paymentTerms || '30 Days Net';
+            document.getElementById('editAccountEmail').value = a.billingEmail || '';
+            document.getElementById('editAccountAddress').value = a.billingAddress || '';
+            openAppModal('modalEditAccount');
+        }
+
+        function saveEditedAccount(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            socket.emit('admin_update_account', {
+                accountNumber: document.getElementById('editAccountNum').value,
+                companyName: document.getElementById('editAccountCompany').value.trim(),
+                discountPct: parseFloat(document.getElementById('editAccountDiscount').value) || 0,
+                paymentTerms: document.getElementById('editAccountTerms').value.trim(),
+                billingEmail: document.getElementById('editAccountEmail').value.trim(),
+                billingAddress: document.getElementById('editAccountAddress').value.trim()
+            });
+            closeAppModal('modalEditAccount');
+            return false;
+        }
+
+        function deleteAccount(accNum) {
+            if (confirm(`Delete account ${accNum}?`)) {
+                socket.emit('admin_delete_account', accNum);
+            }
+        }
+
+        function openAmendModal(jobId) {
+            const job = (allJobs || []).find(j => j.id == jobId);
+            if (!job) return alert('Booking #' + jobId + ' not found.');
+
+            document.getElementById('amendJobId').value = job.id;
+            document.getElementById('amendPassenger').value = job.passenger || '';
+            document.getElementById('amendPhone').value = job.phone || '';
+            document.getElementById('amendPickup').value = job.pickup || '';
+            document.getElementById('amendDropoff').value = job.dropoff || '';
+            document.getElementById('amendFare').value = job.fare || 0;
+            document.getElementById('amendVehClass').value = job.vehicleClass || 'ANY';
+            document.getElementById('amendNotes').value = '';
+
+            const viasCont = document.getElementById('amendViasContainer');
+            if (viasCont) {
+                viasCont.innerHTML = '';
+                if (job.vias) {
+                    try {
+                        const parsed = typeof job.vias === 'string' && job.vias.startsWith('[') ? JSON.parse(job.vias) : [job.vias];
+                        parsed.forEach(v => {
+                            if (v) addAmendViaField(v);
+                        });
+                    } catch(e) {}
+                }
+            }
+
+            openAppModal('modalAmendJob');
+        }
+
+        function addAmendViaField(val = '') {
+            const container = document.getElementById('amendViasContainer');
+            if (!container) return;
+            const div = document.createElement('div');
+            div.style.display = 'flex';
+            div.style.gap = '6px';
+            div.style.marginBottom = '4px';
+            div.innerHTML = `<input type="text" class="amend-via-input" value="${escapeHtml(val)}" placeholder="Stop address" style="flex:1;"><button type="button" class="btn-red" style="width:auto; padding:2px 8px;" onclick="this.parentElement.remove()">✕</button>`;
+            container.appendChild(div);
+        }
+
+        function recalcAmendRoute() {
+            // Optional live recalculation trigger for amended coordinates
+        }
+
+        function saveAmendedBooking(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            const jobId = document.getElementById('amendJobId').value;
+            const viaInputs = document.querySelectorAll('#amendViasContainer .amend-via-input');
+            const vias = Array.from(viaInputs).map(inp => inp.value.trim()).filter(Boolean);
+
+            const payload = {
+                id: parseInt(jobId),
+                passenger: document.getElementById('amendPassenger').value.trim(),
+                phone: document.getElementById('amendPhone').value.trim(),
+                pickup: document.getElementById('amendPickup').value.trim(),
+                dropoff: document.getElementById('amendDropoff').value.trim(),
+                fare: parseFloat(document.getElementById('amendFare').value) || 0,
+                vehicleClass: document.getElementById('amendVehClass').value,
+                vias: JSON.stringify(vias),
+                reason: document.getElementById('amendNotes').value.trim()
+            };
+
+            socket.emit('admin_amend_booking', payload);
+            closeAppModal('modalAmendJob');
+            return false;
+        }
+
+        // --- REASSIGN MODAL HANDLERS ---
+        function openReassignModal(jobId) {
+            const job = (allJobs || []).find(j => j.id == jobId);
+            if (!job) return alert('Booking #' + jobId + ' not found.');
+
+            document.getElementById('reassignJobId').value = job.id;
+            document.getElementById('reassignJobSummary').innerText = `Booking #${job.id} - ${job.passenger} (${job.pickup} ➔ ${job.dropoff})`;
+            document.getElementById('reassignReason').value = '';
+
+            const sel = document.getElementById('reassignTargetDriver');
+            if (sel) {
+                sel.innerHTML = '<option value="">-- Choose Driver --</option>';
+                (allDrivers || []).forEach(d => {
+                    sel.innerHTML += `<option value="${d.driverId}">${d.name || d.driverId} (${d.callsign || d.driverId})</option>`;
+                });
+            }
+
+            openAppModal('modalReassignJob');
+        }
+
+        function toggleReassignOptions() {
+            const action = document.getElementById('reassignActionType').value;
+            const wrap = document.getElementById('reassignDriverSelectWrapper');
+            if (wrap) wrap.style.display = action === 'REASSIGN_DRIVER' ? 'block' : 'none';
+        }
+
+        function executeReassignment(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            const jobId = parseInt(document.getElementById('reassignJobId').value);
+            const action = document.getElementById('reassignActionType').value;
+            const targetDriver = document.getElementById('reassignTargetDriver').value;
+            const reason = document.getElementById('reassignReason').value.trim();
+
+            if (action === 'REASSIGN_DRIVER' && !targetDriver) {
+                alert('Please select a driver to reassign to.');
+                return false;
+            }
+
+            socket.emit('admin_reassign_booking', {
+                jobId: jobId,
+                newDriverId: action === 'REASSIGN_DRIVER' ? targetDriver : null,
+                action: action,
+                reason: reason
+            });
+
+            closeAppModal('modalReassignJob');
+            return false;
+        }
+
+        // --- CANCEL MODAL HANDLERS ---
+        function openCancelModal(jobId) {
+            const job = (allJobs || []).find(j => j.id == jobId);
+            if (!job) return alert('Booking #' + jobId + ' not found.');
+
+            document.getElementById('cancelJobId').value = job.id;
+            document.getElementById('cancelJobSummary').innerText = `Are you sure you want to cancel #${job.id} for ${job.passenger}?`;
+            document.getElementById('cancelReason').value = '';
+
+            openAppModal('modalCancelJob');
+        }
+
+        function executeCancellation(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            const jobId = parseInt(document.getElementById('cancelJobId').value);
+            const reason = document.getElementById('cancelReason').value.trim();
+
+            socket.emit('admin_cancel_booking', { jobId, reason });
+            closeAppModal('modalCancelJob');
+            return false;
+        }
+
+        // --- TRIP HISTORY / AUDIT MODAL HANDLERS ---
+        function openTripHistoryModal(jobId) {
+            const jobRef = document.getElementById('histJobRef');
+            if (jobRef) jobRef.innerText = '#' + jobId;
+            
+            // Check if there is an audit content container
+            const cont = document.getElementById('modalTripHistoryContent') || document.querySelector('#modalTripHistory .modal-card');
+            openAppModal('modalTripHistory');
+            
+            socket.emit('get_booking_audit', jobId);
+        }
+
+        socket.on('booking_audit_data', (data) => {
+            const list = document.getElementById('tripHistoryList') || document.querySelector('#modalTripHistory ul') || document.querySelector('#modalTripHistory .audit-container');
+            if (!list) return;
+            list.innerHTML = '';
+            if (!data.logs || data.logs.length === 0) {
+                list.innerHTML = '<li style="color:#94a3b8; padding:8px;">No audit events recorded for this trip.</li>';
+                return;
+            }
+            data.logs.forEach(log => {
+                const li = document.createElement('li');
+                li.style.padding = '6px 0';
+                li.style.borderBottom = '1px solid #334155';
+                li.style.fontSize = '0.85rem';
+                li.innerHTML = `<strong style="color:#38bdf8;">${escapeHtml(log.action || 'EVENT')}</strong>: ${escapeHtml(log.details || '')} <span style="float:right; color:#64748b;">${escapeHtml(log.timestamp || '')}</span>`;
+                list.appendChild(li);
+            });
+        });
+
+function openAmendModal(jobId) {
+            const j = allJobs.find(x => x.id === jobId);
+            if (!j) return;
+            document.getElementById('amendJobId').value = j.id;
+            document.getElementById('amendPassenger').value = j.passenger;
+            document.getElementById('amendPhone').value = j.phone;
+            document.getElementById('amendVehClass').value = j.vehicleClass || 'ANY';
+            document.getElementById('amendPickup').value = j.pickup;
+            document.getElementById('amendDropoff').value = j.dropoff;
+            document.getElementById('amendFare').value = j.fare;
+            document.getElementById('amendNotes').value = j.customerNotes || '';
+
+            const wrap = document.getElementById('amendViasContainer');
+            wrap.innerHTML = '';
+            const vias = JSON.parse(j.vias || '[]');
+            vias.forEach(v => addAmendViaField(v));
+
+            openAppModal('modalAmendJob');
+        }
+
+        async function recalcAmendRoute() {
+            const pickup = document.getElementById('amendPickup').value.trim();
+            const dropoff = document.getElementById('amendDropoff').value.trim();
+            const vias = Array.from(document.querySelectorAll('.amend-via-input')).map(i => i.value.trim()).filter(v => v !== '');
+            const vClass = document.getElementById('amendVehClass').value;
+
+            if (!pickup || !dropoff) return;
+            const stops = [pickup, ...vias, dropoff];
+
+            try {
+                const geocode = async (addr) => {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=gb&limit=1&q=${encodeURIComponent(addr)}`);
+                    const d = await res.json();
+                    return (d && d.length > 0) ? `${d[0].lon},${d[0].lat}` : null;
+                };
+                const coords = await Promise.all(stops.map(s => geocode(s)));
+                if (coords.every(c => c !== null)) {
+                    const rRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords.join(';')}?overview=false`);
+                    const rData = await rRes.json();
+                    if (rData.routes && rData.routes.length > 0) {
+                        const miles = parseFloat((rData.routes[0].distance * 0.000621371).toFixed(1));
+                        const fare = calculateProgressiveTariff(miles, vClass, vias.length, false);
+                        document.getElementById('amendFare').value = fare.toFixed(2);
+                    }
+                }
+            } catch(e){}
+        }
+
+        function saveAmendedBooking(e) {
+            e.preventDefault();
+            const vias = Array.from(document.querySelectorAll('.amend-via-input')).map(i => i.value.trim()).filter(v => v !== '');
+            socket.emit('admin_amend_booking', {
+                id: document.getElementById('amendJobId').value,
+                passenger: document.getElementById('amendPassenger').value.trim(),
+                phone: document.getElementById('amendPhone').value.trim(),
+                pickup: document.getElementById('amendPickup').value.trim(),
+                vias: vias,
+                dropoff: document.getElementById('amendDropoff').value.trim(),
+                vehicleClass: document.getElementById('amendVehClass').value,
+                fare: parseFloat(document.getElementById('amendFare').value),
+                customerNotes: document.getElementById('amendNotes').value.trim(),
+                reason: document.getElementById('amendNotes').value.trim()
+            });
+            closeAppModal('modalAmendJob');
+        }
+
+        function openTripHistoryModal(jobId) {
+            const j = allJobs.find(x => x.id === jobId);
+            if (!j) return;
+            document.getElementById('histJobRef').textContent = `📜 Lifecycle History: ${j.id}`;
+            document.getElementById('histJobOverview').innerHTML = `
+                <div><strong>Passenger:</strong> ${j.passenger} (${j.phone})</div>
+                <div><strong>Route:</strong> ${j.pickup} ➔ ${j.dropoff}</div>
+                <div><strong>Driver:</strong> ${j.assignedDriverId || 'Unassigned'} | <strong>Total Fare:</strong> £${Number(j.fare).toFixed(2)}</div>
+            `;
+            const timeline = document.getElementById('histTimeline');
+            timeline.innerHTML = '';
+            let logs = [];
+            try { logs = JSON.parse(j.dispatchAuditLog || '[]'); } catch(e){}
+            if (logs.length === 0) {
+                timeline.innerHTML = '<div style="color:#64748b;">No recorded events yet.</div>';
+            } else {
+                logs.forEach(l => {
+                    timeline.innerHTML += `
+                        <div class="timeline-item">
+                            <strong style="color:#38bdf8;">${l.action}</strong> <span style="color:#94a3b8; font-size:0.75rem;">(${l.time})</span><br>
+                            <span>${l.note}</span>
+                        </div>
+                    `;
+                });
+            }
+            openAppModal('modalTripHistory');
+        }
+
+        function openReassignModal(jobId) {
+            const j = allJobs.find(x => x.id === jobId);
+            if (!j) return;
+            document.getElementById('reassignJobId').value = j.id;
+            document.getElementById('reassignJobSummary').innerHTML = `Job ${j.id}: ${j.passenger} | Current: <strong>${j.assignedDriverId || 'None'}</strong>`;
+            toggleReassignOptions();
+            openAppModal('modalReassignJob');
+        }
+
+        function toggleReassignOptions() {
+            const isRecall = document.getElementById('reassignActionType').value === 'RECALL_TO_BASE';
+            document.getElementById('reassignDriverSelectWrapper').style.display = isRecall ? 'none' : 'block';
+        }
+
+        function executeReassignment(e) {
+            e.preventDefault();
+            const jId = document.getElementById('reassignJobId').value;
+            const action = document.getElementById('reassignActionType').value;
+            const targetDriver = (action === 'RECALL_TO_BASE') ? 'UNASSIGNED' : document.getElementById('reassignTargetDriver').value;
+            const reason = document.getElementById('reassignReason').value.trim();
+            socket.emit('admin_reassign_booking', { jobId: jId, action, newDriverId: targetDriver, reason });
+            closeAppModal('modalReassignJob');
+        }
+
+        function openCancelModal(jobId) {
+            const j = allJobs.find(x => x.id === jobId);
+            if (!j) return;
+            document.getElementById('cancelJobId').value = j.id;
+            document.getElementById('cancelJobSummary').textContent = `Cancel ${j.id} (${j.passenger} - £${Number(j.fare).toFixed(2)})?`;
+            openAppModal('modalCancelJob');
+        }
+
+        function executeCancellation(e) {
+            e.preventDefault();
+            socket.emit('admin_cancel_booking', { jobId: document.getElementById('cancelJobId').value, reason: document.getElementById('cancelReason').value.trim() });
+            closeAppModal('modalCancelJob');
+        }
+
+        
+        function onPassengerCountChange() {
+            const pax = parseInt(document.getElementById("jobPax").value, 10) || 1;
+            const vehSelect = document.getElementById("jobVehClass");
+            const splitBanner = document.getElementById("splitBookingBanner");
+            const splitPax = document.getElementById("splitPaxCount");
+
+            if (pax >= 7) {
+                if (pax === 7) vehSelect.value = "Minibus_7";
+                if (pax >= 8) vehSelect.value = "Minibus_8";
+                if (splitBanner) {
+                    splitBanner.style.display = "flex";
+                    if (splitPax) splitPax.textContent = pax;
+                }
+            } else if (pax >= 5) {
+                vehSelect.value = "MPV_6";
+                if (splitBanner) splitBanner.style.display = "none";
+            } else {
+                if (splitBanner) splitBanner.style.display = "none";
+                // If previously forced to MPV/Minibus, restore to standard
+                if (["MPV_6", "Minibus_7", "Minibus_8"].includes(vehSelect.value)) {
+                    vehSelect.value = "ANY";
+                }
+            }
+            if (typeof recalculateDispatchFare === "function") {
+                recalculateDispatchFare();
+            }
+        }
+
+        function splitCurrentBooking() {
+            const totalPax = parseInt(document.getElementById("jobPax").value, 10) || 7;
+            const car1Pax = 4;
+            const car2Pax = totalPax - 4;
+            
+            // Set first car to 4 pax standard
+            document.getElementById("jobPax").value = car1Pax;
+            document.getElementById("jobVehClass").value = "Saloon";
+            const notesEl = document.getElementById("jobNotes");
+            const origNotes = notesEl ? notesEl.value : "";
+            if (notesEl) {
+                notesEl.value = (origNotes ? origNotes + " | " : "") + "PART 1 OF 2 (" + car1Pax + " Pax) - Split booking for " + totalPax + " pax group";
+            }
+            if (typeof recalculateDispatchFare === "function") recalculateDispatchFare();
+
+            alert("✂️ Booking converted to Car 1 (" + car1Pax + " Pax Saloon).\n\nDispatch this booking, then create Car 2 (" + car2Pax + " Pax Saloon) for the second driver.");
+            const splitBanner = document.getElementById("splitBookingBanner");
+            if (splitBanner) splitBanner.style.display = "none";
+        }
+
+        async function recalculateDispatchFare() {
+    // Ensure distance is fetched if addresses are present and distance is 0
+    const pVal = document.getElementById('jobPickup')?.value;
+    const dVal = document.getElementById('jobDropoff')?.value;
+    if (pVal && dVal && dispatchCalculatedMiles === 0 && typeof fetchDispatchDistance === 'function') {
+        await fetchDispatchDistance();
+    }
+            if (customPricingActive) return;
+
+            const pickup = (document.getElementById('jobPickup').value || '').trim().toLowerCase();
+            const dropoff = (document.getElementById('jobDropoff').value || '').trim().toLowerCase();
+            const fullRoute = pickup + ' ' + dropoff;
+            const vClass = document.getElementById('jobVehClass').value;
+            const petType = document.getElementById('jobPetType').value;
+            const hasPet = (petType === 'Dog' || petType === 'Cat');
+            const viaCount = document.querySelectorAll('.via-input').length;
+            const pricingMode = document.getElementById('pricingModeToggle').value;
+            const busySurge = parseFloat(document.getElementById('tfBusySurgePct').value) || 0.0;
+
+            let airportMatch = allAirports.find(a => {
+                if (!a) return false;
+                const name = (a.name || '').toLowerCase();
+                const code = (a.iataCode || '').toLowerCase();
+                const kw = (a.keywords || '').toLowerCase();
+                const pc = (a.postcode || '').toLowerCase();
+
+                // 1. Strict IATA code word boundary check (LHR, BRS, LGW, CWL, BIR)
+                if (code) {
+                    const codeRegex = new RegExp('\\b' + code + '\\b', 'i');
+                    if (codeRegex.test(pickup) || codeRegex.test(dropoff)) return true;
+                }
+
+                // 2. Specific airport keyword phrases
+                if (kw) {
+                    const terms = kw.split(',').map(t => t.trim()).filter(Boolean);
+                    if (terms.some(t => fullRoute.includes(t))) return true;
+                }
+
+                // 3. Exact full postcode match
+                if (pc && fullRoute.includes(pc)) return true;
+
+                // 4. Exact full airport name match (e.g. "bristol airport", "gatwick airport")
+                if (name && fullRoute.includes(name)) return true;
+
+                // 5. Unique single-name airports only (Heathrow, Gatwick) - NOT generic city names like "Bristol" or "London"
+                const cityStopWords = ['bristol', 'london', 'airport', 'international', 'terminal'];
+                const distinctTokens = name.split(' ')
+                    .map(w => w.replace(/[^a-z0-9]/gi, ''))
+                    .filter(w => !cityStopWords.includes(w) && w.length >= 4);
+
+                if (distinctTokens.length > 0 && distinctTokens.some(tok => fullRoute.includes(tok))) {
+                    return true;
+                }
+
+                return false;
+            });
+
+            if (airportMatch) {
+                let base = parseFloat(airportMatch.baseRate || 0);
+                let airMult = 1.0;
+                if (vClass === 'Estate') airMult += (parseFloat(document.getElementById('tfAirportEstatePct').value) || 10) / 100.0;
+                else if (vClass === 'MPV_6') airMult += (parseFloat(document.getElementById('tfAirportMpvPct').value) || 45) / 100.0;
+                else if (vClass === 'Minibus_7') airMult += (parseFloat(document.getElementById('tfAirportMinibus7Pct').value) || 60) / 100.0;
+                else if (vClass === 'Minibus_8') airMult += (parseFloat(document.getElementById('tfAirportMinibus8Pct').value) || 60) / 100.0;
+                else if (vClass === 'Executive') airMult += (parseFloat(document.getElementById('tfAirportExecPct').value) || 70) / 100.0;
+
+                let finalFare = (base * airMult) + (viaCount * (parseFloat(document.getElementById('tfViaStopFee').value) || 5.00)) + (hasPet ? (parseFloat(document.getElementById('tfPetSurcharge').value) || 6.00) : 0);
+
+                const isHeathrow = airportMatch.iataCode === 'LHR' || (airportMatch.name && airportMatch.name.toLowerCase().includes('heathrow'));
+                const baselineMiles = isHeathrow ? 100 : 30;
+                const miles = (typeof dispatchCalculatedMiles !== 'undefined' && dispatchCalculatedMiles > 0) ? dispatchCalculatedMiles : 0.0;
+
+                if (miles > baselineMiles) {
+                    const extraMiles = miles - baselineMiles;
+                    const extraPerMileRate = 1.80;
+                    finalFare += (extraMiles * extraPerMileRate * airMult);
+                }
+
+                if (busySurge > 0) finalFare = finalFare * (1 + (busySurge / 100.0));
+                document.getElementById('jobFare').value = finalFare.toFixed(2);
+                document.getElementById('dispatchPricingLabel').textContent = `Fixed Airport (${airportMatch.name})` + (miles > baselineMiles ? ` + Outside Area Surcharge (${miles}m)` : '');
+                return;
+            }
+
+            if (dispatchCalculatedMiles > 0) {
+                if (pricingMode === 'meter') {
+                    const totalYards = dispatchCalculatedMiles * 1760;
+                    const pulses = Math.ceil(totalYards / (parseInt(document.getElementById('tfPulseYard').value) || 176));
+                    let meterBase = parseFloat(document.getElementById('tfMeterBaseFare').value) || 3.50;
+                    
+                    let meterUplift = 1.0;
+                    if (vClass === 'Estate') meterUplift += (parseFloat(document.getElementById('tfMeterEstatePct').value) || 10) / 100.0;
+                    else if (vClass === 'MPV_6') meterUplift += (parseFloat(document.getElementById('tfMeterMpvPct').value) || 40) / 100.0;
+                    else if (vClass === 'Minibus_7') meterUplift += (parseFloat(document.getElementById('tfMeterMinibus7Pct').value) || 60) / 100.0;
+                    else if (vClass === 'Minibus_8') meterUplift += (parseFloat(document.getElementById('tfMeterMinibus8Pct').value) || 60) / 100.0;
+                    else if (vClass === 'Executive') meterUplift += (parseFloat(document.getElementById('tfMeterExecPct').value) || 70) / 100.0;
+
+                    let baseFare = (meterBase + (pulses * (parseFloat(document.getElementById('tfPulseCost').value) || 0.20))) * meterUplift;
+                    baseFare += (viaCount * (parseFloat(document.getElementById('tfViaStopFee').value) || 5.00)) + (hasPet ? (parseFloat(document.getElementById('tfPetSurcharge').value) || 6.00) : 0);
+
+                    if (busySurge > 0) baseFare = baseFare * (1 + (busySurge / 100.0));
+
+                    document.getElementById('jobFare').value = baseFare.toFixed(2);
+                    document.getElementById('dispatchPricingLabel').textContent = `Live Digital Pulse Meter`;
+                } else {
+                    const progressiveFare = calculateProgressiveTariff(dispatchCalculatedMiles, vClass, viaCount, hasPet);
+                    document.getElementById('jobFare').value = progressiveFare.toFixed(2);
+                    document.getElementById('dispatchPricingLabel').textContent = `Progressive Distance (${dispatchCalculatedMiles}m)`;
+                }
+            } else {
+                let startFee = (pricingMode === 'meter') ? (parseFloat(document.getElementById('tfMeterBaseFare').value) || 3.50) : (parseFloat(document.getElementById('tfBaseFlagDrop').value) || 5.00);
+                if (busySurge > 0) startFee = startFee * (1 + (busySurge / 100.0));
+                document.getElementById('jobFare').value = startFee.toFixed(2);
+            }
+
+            document.getElementById('dispatchDistLabel').textContent = `${dispatchCalculatedMiles} Miles (${viaCount} Via${viaCount === 1 ? '' : 's'})`;
+        }
+
+        let dispatchDebounceTimer = null;
+        function triggerDispatchAutoRouting() {
+            recalculateDispatchFare();
+            clearTimeout(dispatchDebounceTimer);
+
+            dispatchDebounceTimer = setTimeout(async () => {
+                const pickup = document.getElementById('jobPickup').value.trim();
+                const dropoff = document.getElementById('jobDropoff').value.trim();
+                const vias = Array.from(document.querySelectorAll('.via-input')).map(i => i.value.trim()).filter(v => v !== '');
+
+                if (!pickup || !dropoff) return;
+                const stops = [pickup, ...vias, dropoff];
+
+                try {
+                    const pEl = document.getElementById("jobPickup");
+                    const dEl = document.getElementById("jobDropoff");
+
+                    const geocodeOrCache = async (el, addr) => {
+                        if (el && el.dataset.lat && el.dataset.lng) {
+                            return `${el.dataset.lng},${el.dataset.lat}`;
+                        }
+                        try {
+                            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=gb&limit=1&q=${encodeURIComponent(addr)}`);
+                            const d = await res.json();
+                            return (d && d.length > 0) ? `${d[0].lon},${d[0].lat}` : null;
+                        } catch(e) { return null; }
+                    };
+
+                    const viaEls = Array.from(document.querySelectorAll(".via-input"));
+                    const coords = await Promise.all([
+                        geocodeOrCache(pEl, pickup),
+                        ...viaEls.map(el => geocodeOrCache(el, el.value.trim())),
+                        geocodeOrCache(dEl, dropoff)
+                    ]);
+                    if (coords.every(c => c !== null)) {
+                        const rRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords.join(';')}?overview=false`);
+                        const rData = await rRes.json();
+                        if (rData.routes && rData.routes.length > 0) {
+                            dispatchCalculatedMiles = parseFloat((rData.routes[0].distance * 0.000621371).toFixed(1));
+                            recalculateDispatchFare();
+                        }
+                    }
+                } catch(e){}
+            }, 450);
+        }
+
+        function createJob(e) {
+            if (e && e.preventDefault) e.preventDefault();
+
+            const getV = (id) => {
+                const el = document.getElementById(id);
+                return el ? el.value.trim() : '';
+            };
+
+            const passenger = getV('jobPassenger');
+            const phone = getV('jobPhone');
+            const pickup = getV('jobPickup');
+            const dropoff = getV('jobDropoff');
+
+            if (!passenger || !pickup || !dropoff) {
+                alert('Please provide Passenger Name, Pickup Address, and Destination.');
+                return false;
+            }
+
+            // Collect via stopovers if any exist
+            const viaInputs = document.querySelectorAll('#viasContainer input');
+            const vias = Array.from(viaInputs).map(inp => inp.value.trim()).filter(Boolean);
+
+            const assignedDriver = getV('jobAssignDriver');
+            const fareVal = parseFloat(getV('jobFare')) || 0.00;
+
+            const pEl = document.getElementById("jobPickup");
+            const dEl = document.getElementById("jobDropoff");
+
+            const jobData = {
+                passenger: passenger,
+                phone: phone,
+                pickup: pickup,
+                dropoff: dropoff,
+                pickupLat: pEl && pEl.dataset.lat ? parseFloat(pEl.dataset.lat) : null,
+                pickupLng: pEl && pEl.dataset.lng ? parseFloat(pEl.dataset.lng) : null,
+                pickupPostcode: pEl && pEl.dataset.postcode ? pEl.dataset.postcode : null,
+                dropoffLat: dEl && dEl.dataset.lat ? parseFloat(dEl.dataset.lat) : null,
+                dropoffLng: dEl && dEl.dataset.lng ? parseFloat(dEl.dataset.lng) : null,
+                vias: vias,
+                fare: fareVal,
+                paymentMethod: getV('jobPayMethod') || 'Cash',
+                accountNumber: getV('jobAccountSelect') || null,
+                vehicleClass: getV('jobVehClass') || 'Standard',
+                passengers: parseInt(getV('jobPax')) || 1,
+                petType: getV('jobPetType') || 'None',
+                customerNotes: getV('jobNotes'),
+                assignedDriverId: (assignedDriver && !['AUTO', 'UNASSIGNED', 'NONE'].includes(assignedDriver.toUpperCase())) ? assignedDriver : null
+            };
+
+            console.log('⚡ Dispatching Job:', jobData);
+            socket.emit('create_job', jobData);
+
+            // Reset form fields after dispatch
+            document.getElementById('bookingForm').reset();
+            const viasCont = document.getElementById('viasContainer');
+            if (viasCont) viasCont.innerHTML = '';
+            
+            const distLbl = document.getElementById('dispatchDistLabel');
+            if (distLbl) distLbl.innerText = '-';
+            const priceLbl = document.getElementById('dispatchPricingLabel');
+            if (priceLbl) priceLbl.innerText = '-';
+
+            return false;
+        }
+
+        socket.on('job_created_ack', (res) => {
+            document.getElementById('bookingForm').reset();
+            document.getElementById('viasContainer').innerHTML = '';
+            dispatchCalculatedMiles = 0.0;
+            recalculateDispatchFare();
+            alert(`✓ Booking ${res.jobId} Dispatched Successfully!`);
+        });
+
+        function saveTariff(e) {
+            e.preventDefault();
+            const getVal = (id, def = 0) => { const el = document.getElementById(id); return el ? el.value : def; };
+            socket.emit('update_system_tariff', {
+                defaultLocalPricingMode: getVal('tfDefaultPricingMode', 'dynamic'),
+                busySurgePct: parseFloat(getVal('tfBusySurgePct', 0)),
+
+                meterBaseFare: parseFloat(getVal('tfMeterBaseFare', 3.50)),
+                meterDistancePulseYard: parseInt(getVal('tfPulseYard', 176)),
+                meterDistancePulseCost: parseFloat(getVal('tfPulseCost', 0.20)),
+                meterTimePulseSeconds: parseInt(getVal('tfPulseSec', 45)),
+
+                meterEstatePct: parseFloat(getVal('tfMeterEstatePct', 10)),
+                meterMpvPct: parseFloat(getVal('tfMeterMpvPct', 40)),
+                meterMinibus7Pct: parseFloat(getVal('tfMeterMinibus7Pct', 60)),
+                meterMinibus8Pct: parseFloat(getVal('tfMeterMinibus8Pct', 60)),
+                meterExecPct: parseFloat(getVal('tfMeterExecPct', 70)),
+
+                baseFlagDrop: parseFloat(getVal('tfBaseFlagDrop', 5.00)),
+                firstMileRate: parseFloat(getVal('tfFirstMileRate', 2.00)),
+                tier1PerMile: parseFloat(getVal('tfTier1PerMile', 2.00)),
+                tier2PerMile: parseFloat(getVal('tfTier2PerMile', 1.80)),
+                tier3PerMile: parseFloat(getVal('tfTier3PerMile', 1.50)),
+
+                freeWaitMins: parseInt(getVal('tfFreeWaitMins', 5)),
+                waitingRatePerMin: parseFloat(getVal('tfWaitRate', 0.35)),
+                viaStopFee: parseFloat(getVal('tfViaStopFee', 5.00)),
+                petSurcharge: parseFloat(getVal('tfPetSurcharge', 6.00)),
+
+                estatePercent: (parseFloat(getVal('tfEstatePct', 10)) || 0) / 100.0,
+                mpvPercent: (parseFloat(getVal('tfMpvPct', 40)) || 0) / 100.0,
+                minibus7Percent: (parseFloat(getVal('tfMinibus7Pct', 60)) || 0) / 100.0,
+                minibus8Percent: (parseFloat(getVal('tfMinibus8Pct', 60)) || 0) / 100.0,
+                execPercent: (parseFloat(getVal('tfExecPct', 70)) || 0) / 100.0,
+
+                airportEstatePercent: (parseFloat(getVal('tfAirportEstatePct', 10)) || 0) / 100.0,
+                airportMpvPercent: (parseFloat(getVal('tfAirportMpvPct', 45)) || 0) / 100.0,
+                airportMinibus7Percent: (parseFloat(getVal('tfAirportMinibus7Pct', 60)) || 0) / 100.0,
+                airportMinibus8Percent: (parseFloat(getVal('tfAirportMinibus8Pct', 60)) || 0) / 100.0,
+                airportExecPercent: (parseFloat(getVal('tfAirportExecPct', 70)) || 0) / 100.0
+            });
+            closeAppModal('modalTariff');
+        }
+
+        function saveAirport(e) {
+            e.preventDefault();
+            socket.emit('admin_add_airport', {
+                name: document.getElementById('airName').value.trim(),
+                iataCode: document.getElementById('airIata').value.trim(),
+                keywords: document.getElementById('airKeywords').value.trim(),
+                baseRate: parseFloat(document.getElementById('airRate').value)
+            });
+            document.getElementById('airName').value = '';
+            document.getElementById('airIata').value = '';
+            document.getElementById('airKeywords').value = '';
+            document.getElementById('airRate').value = '';
+        }
+
+        function saveDriver(e) {
+            e.preventDefault();
+            socket.emit('admin_create_driver', {
+                driverId: document.getElementById('drvId').value.trim().toUpperCase(),
+                name: document.getElementById('drvName').value.trim(),
+                phone: document.getElementById('drvPhone').value.trim(),
+                pin: document.getElementById('drvPin').value.trim(),
+                vehicle: document.getElementById('drvVehicle').value.trim(),
+                vehicleClass: document.getElementById('drvClass').value,
+                maxPax: parseInt(document.getElementById('drvMaxPax').value) || 4,
+                customCommissionPct: parseFloat(document.getElementById('drvCommPct').value) || 20.0,
+                acceptsPets: document.getElementById('drvAcceptsPets').value === '1',
+                badgeExpiry: document.getElementById('drvBadgeExp').value,
+                motExpiry: document.getElementById('drvMotExp').value,
+                insuranceExpiry: document.getElementById('drvInsExp').value
+            });
+            document.getElementById('drvId').value = '';
+            document.getElementById('drvName').value = '';
+            document.getElementById('drvVehicle').value = '';
+        }
+
+        // === STANDS & PLOTS ENGINE ===
+        socket.on('update_plots', (plots) => {
+            allPlots = plots || [];
+            renderPlotsTable();
+        });
+
+        function renderPlotsTable() {
+            if (Array.isArray(allPlots)) {
+                allPlots.sort((a, b) => {
+                    const numA = parseInt(String(a.code || '').replace(/\D/g, ''), 10);
+                    const numB = parseInt(String(b.code || '').replace(/\D/g, ''), 10);
+                    if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+                        return numA - numB;
+                    }
+                    return String(a.code || '').localeCompare(String(b.code || ''), undefined, { numeric: true, sensitivity: 'base' });
+                });
+            }
+            const tbody = document.getElementById('plotsTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            if (allPlots.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#64748b; padding:16px;">No taxi stands or area plots configured yet.</td></tr>';
+                return;
+            }
+            allPlots.forEach(p => {
+                const isStand = (p.plotType || '').toLowerCase() === 'stand';
+                tbody.innerHTML += `
+                    <tr>
+                        <td><strong>${escapeHtml(p.code || 'PLOT')}</strong></td>
+                        <td>${escapeHtml(p.name || '')}</td>
+                        <td><span class="badge badge-blue">${escapeHtml(p.postcodeSector || 'General')}</span></td>
+                        <td><span class="badge ${isStand ? 'badge-yellow' : 'badge-green'}">${isStand ? '🚕 FIFO Stand' : '🏘️ Area Sector'}</span></td>
+                        <td>${p.radiusMeters || 350}m</td>
+                        <td><span style="color:#38bdf8;">Cap: ${p.maxCapacity || 10}</span></td>
+                        <td>
+                            <button type="button" class="btn-blue" style="padding:2px 8px; font-size:0.75rem; margin-right:4px;" onclick="openEditPlotModal(${p.id})">✏️ Amend</button>
+                    <button type="button" class="btn-red" style="padding:2px 8px; font-size:0.75rem;" onclick="deletePlot(${p.id})">🗑️ Delete</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        
+        window.openEditPlotModal = function(plotId) {
+            const p = (allPlots || []).find(x => x.id == plotId);
+            if (!p) return alert('Plot #' + plotId + ' not found');
+            document.getElementById('editPlotId').value = p.id;
+            document.getElementById('editPlotName').value = p.name || '';
+            document.getElementById('editPlotCode').value = p.code || '';
+            document.getElementById('editPlotPostcodeSector').value = p.postcodeSector || '';
+            document.getElementById('editPlotType').value = p.plotType || 'stand';
+            document.getElementById('editPlotRadius').value = p.radiusMeters || 350;
+            document.getElementById('editPlotCapacity').value = p.maxCapacity || 10;
+            window.openAppModal('modalEditPlot');
+        };
+
+        window.savePlotAmend = function(e) {
+            e.preventDefault();
+            const idVal = parseInt(document.getElementById('editPlotId').value, 10);
+            if (!idVal) return alert('Invalid Plot ID');
+
+            const payload = {
+                id: idVal,
+                name: document.getElementById('editPlotName').value.trim(),
+                code: document.getElementById('editPlotCode').value.trim().toUpperCase(),
+                postcodeSector: document.getElementById('editPlotPostcodeSector').value.trim().toUpperCase(),
+                plotType: document.getElementById('editPlotType').value,
+                radiusMeters: parseInt(document.getElementById('editPlotRadius').value, 10) || 350,
+                maxCapacity: parseInt(document.getElementById('editPlotCapacity').value, 10) || 10
+            };
+
+            if (typeof socket !== 'undefined') {
+                socket.emit('admin_update_plot', payload);
+            }
+            window.closeAppModal('modalEditPlot');
+        };
+
+        function deletePlot(plotId) {
+            if (!confirm('Are you sure you want to remove this stand/plot?')) return;
+            socket.emit('admin_delete_plot', plotId);
+        }
+
+        function savePlot(e) {
+            e.preventDefault();
+            socket.emit('admin_add_plot', {
+                name: document.getElementById('plotName').value.trim(),
+                code: document.getElementById('plotCode').value.trim().toUpperCase(),
+                postcodeSector: document.getElementById('plotPostcodeSector').value.trim().toUpperCase(),
+                plotType: document.getElementById('plotType').value,
+                radiusMeters: parseInt(document.getElementById('plotRadius').value) || 350,
+                lat: parseFloat(document.getElementById('plotLat').value),
+                lng: parseFloat(document.getElementById('plotLng').value)
+            });
+            document.getElementById('plotName').value = '';
+            document.getElementById('plotCode').value = '';
+            document.getElementById('plotPostcodeSector').value = '';
+        }
+
+        function saveCorporateAccount(e) {
+            e.preventDefault();
+            socket.emit('admin_create_account', {
+                accountNumber: document.getElementById('accNumber').value.trim().toUpperCase(),
+                companyName: document.getElementById('accCompany').value.trim(),
+                discountPct: parseFloat(document.getElementById('accDiscount').value) || 0.0,
+                billingEmail: document.getElementById('accEmail').value.trim(),
+                billingAddress: document.getElementById('accAddress').value.trim()
+            });
+            document.getElementById('accNumber').value = '';
+            document.getElementById('accCompany').value = '';
+            document.getElementById('accEmail').value = '';
+            document.getElementById('accAddress').value = '';
+        }
+
+        socket.on('admin_notice', (res) => { alert((res.success ? '✓ ' : '✕ ') + res.message); });
+    
+// Expose modal handlers to window for inline onclick access
+if (typeof openAmendModal === 'function') window.openAmendModal = openAmendModal;
+if (typeof openReassignModal === 'function') window.openReassignModal = openReassignModal;
+if (typeof openCancelModal === 'function') window.openCancelModal = openCancelModal;
+if (typeof saveAmend === 'function') window.saveAmend = saveAmend;
+if (typeof cancelJob === 'function') window.cancelJob = cancelJob;
+
+
+
+// Expose modal and ledger actions to window scope
+window.openAmendModal = typeof openAmendModal === 'function' ? openAmendModal : function(id){ openAppModal('modalAmendJob'); };
+window.openReassignModal = typeof openReassignModal === 'function' ? openReassignModal : function(id){
+    const jId = document.getElementById('reassignJobId');
+    if (jId) jId.value = id;
+    openAppModal('modalReassignJob');
+};
+window.openCancelModal = typeof openCancelModal === 'function' ? openCancelModal : function(id){
+    const jId = document.getElementById('cancelJobId');
+    if (jId) jId.value = id;
+    openAppModal('modalCancelJob');
+};
+window.openTripHistoryModal = typeof openTripHistoryModal === 'function' ? openTripHistoryModal : function(id){
+    openAppModal('modalTripHistory');
+};
+window.recallJob = typeof recallJob === 'function' ? recallJob : function(id){
+    if (confirm('Reactivate / Recall booking #' + id + '?')) {
+        if (typeof socket !== 'undefined') socket.emit('admin_recall_job', { id: id });
+    }
+};
+
+
+// ================= SMS GATEWAY MODAL LOGIC =================
+async function openSmsSettingsModal() {
+    openAppModal('modalSmsGateway');
+    try {
+        const res = await fetch('/api/sms/settings');
+        const data = await res.json();
+        document.getElementById('smsProviderSelect').value = data.activeProvider || 'simulation';
+        document.getElementById('smsTwilioSid').value = data.twilioSid || '';
+        document.getElementById('smsTwilioToken').value = data.twilioToken || '';
+        document.getElementById('smsTwilioSender').value = data.twilioSender || 'MD-TAXI';
+        document.getElementById('smsTextlocalKey').value = data.textlocalApiKey || '';
+        document.getElementById('smsTextlocalSender').value = data.textlocalSender || 'MD TAXI';
+        document.getElementById('smsAndroidUrl').value = data.androidWebhookUrl || '';
+        document.getElementById('smsAndroidToken').value = data.androidApiToken || '';
+        onSmsProviderChange();
+    } catch (err) {
+        alert('Failed to load SMS settings: ' + err.message);
+    }
+}
+
+function onSmsProviderChange() {
+    const p = document.getElementById('smsProviderSelect').value;
+    document.getElementById('panelTwilio').style.display = (p === 'twilio') ? 'block' : 'none';
+    document.getElementById('panelTextlocal').style.display = (p === 'textlocal') ? 'block' : 'none';
+    document.getElementById('panelAndroid').style.display = (p === 'android_gateway') ? 'block' : 'none';
+}
+
+async function saveSmsSettingsAction() {
+    const payload = {
+        activeProvider: document.getElementById('smsProviderSelect').value,
+        twilioSid: document.getElementById('smsTwilioSid').value.trim(),
+        twilioToken: document.getElementById('smsTwilioToken').value.trim(),
+        twilioSender: document.getElementById('smsTwilioSender').value.trim(),
+        textlocalApiKey: document.getElementById('smsTextlocalKey').value.trim(),
+        textlocalSender: document.getElementById('smsTextlocalSender').value.trim(),
+        androidWebhookUrl: document.getElementById('smsAndroidUrl').value.trim(),
+        androidApiToken: document.getElementById('smsAndroidToken').value.trim()
+    };
+    try {
+        const res = await fetch('/api/sms/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert('✅ SMS Gateway settings saved successfully! Active: ' + result.activeProvider);
+            closeAppModal('modalSmsGateway');
+        } else {
+            alert('Error saving: ' + (result.error || 'Unknown'));
+        }
+    } catch (err) {
+        alert('Network error: ' + err.message);
+    }
+}
+
+async function sendSmsTestAction() {
+    const phone = document.getElementById('smsTestPhone').value.trim();
+    if (!phone) {
+        alert('Please enter a mobile phone number first.');
+        return;
+    }
+    try {
+        const res = await fetch('/api/sms/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('✅ Test SMS dispatched successfully! Check mobile.');
+        } else {
+            alert('❌ Test failed: ' + (data.error || JSON.stringify(data)));
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+
+
+// ================= STRIPE CLIENT HANDLERS =================
+async function openPaymentSettingsModal() {
+    console.log("Opening modalStripeGateway...");
+    openAppModal('modalStripeGateway');
+    try {
+        const res = await fetch('/api/payment-settings');
+        const data = await res.json();
+        if (data && data.success && data.settings) {
+            const s = data.settings;
+            document.getElementById('payActiveMode').value = s.activeMode || 'simulation';
+            document.getElementById('payPublishableKey').value = s.publishableKey || '';
+            document.getElementById('paySecretKey').value = s.secretKey || '';
+            document.getElementById('payCurrency').value = (s.currency || 'GBP').toUpperCase();
+            onPaymentModeChange();
+        }
+    } catch(err) {
+        console.error('Failed to load payment settings:', err);
+    }
+}
+
+function onPaymentModeChange() {
+    const m = document.getElementById('payActiveMode').value;
+    const p = document.getElementById('panelStripeKeys');
+    if (p) p.style.display = (m === 'simulation') ? 'none' : 'block';
+}
+
+async function savePaymentSettingsAction(e) {
+    if (e) e.preventDefault();
+    const payload = {
+        activeMode: document.getElementById('payActiveMode').value,
+        publishableKey: document.getElementById('payPublishableKey').value.trim(),
+        secretKey: document.getElementById('paySecretKey').value.trim(),
+        currency: (document.getElementById('payCurrency').value.trim() || 'GBP').toLowerCase()
+    };
+    try {
+        const res = await fetch('/api/payment-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert('✅ Stripe settings saved directly into SQLite! Active: ' + payload.activeMode.toUpperCase());
+            closeAppModal('modalStripeGateway');
+        } else {
+            alert('Error saving payment settings: ' + (result.error || 'Unknown error'));
+        }
+    } catch(err) {
+        alert('Failed to save settings: ' + err.message);
+    }
+}
+
+</script>
+
+    <!-- MODAL: EDIT AIRPORT RATE -->
+    <div id="modalEditAirport" class="modal-overlay" onclick="closeOverlayModal(event, 'modalEditAirport')">
+        <div class="modal-card" onclick="event.stopPropagation()" style="max-width:480px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">✈️ Amend Airport Rate</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:2px 8px;" onclick="closeAppModal('modalEditAirport')">✕</button>
+            </div>
+            <form onsubmit="saveEditedAirport(event)">
+                <input type="hidden" id="editAirportId">
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:0.8rem; color:#94a3b8;">Airport Name</label>
+                    <input type="text" id="editAirportName" required>
+                </div>
+                <div style="display:flex; gap:8px; margin-bottom:8px;">
+                    <div style="flex:1;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">IATA Code</label>
+                        <input type="text" id="editAirportIata" required>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">Base Rate (Saloon) £</label>
+                        <input type="number" step="0.50" id="editAirportBase" required>
+                    </div>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.8rem; color:#94a3b8;">Keywords (comma separated)</label>
+                    <input type="text" id="editAirportKeywords">
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button type="button" class="btn-gray" onclick="closeAppModal('modalEditAirport')">Cancel</button>
+                    <button type="submit" class="btn-blue">💾 Save Airport Rate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: EDIT DRIVER / STAND / PLATE -->
+    <div id="modalEditDriver" class="modal-overlay" onclick="closeOverlayModal(event, 'modalEditDriver')">
+        <div class="modal-card" onclick="event.stopPropagation()" style="max-width:520px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">🚗 Amend Driver & Vehicle Stand/Plate</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:2px 8px;" onclick="closeAppModal('modalEditDriver')">✕</button>
+            </div>
+            <form onsubmit="saveEditedDriver(event)">
+                <input type="hidden" id="editDriverId">
+                <div style="display:flex; gap:8px; margin-bottom:8px;">
+                    <div style="flex:1;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">Driver Name</label>
+                        <input type="text" id="editDriverName" required>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">Phone Number</label>
+                        <input type="text" id="editDriverPhone" required>
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; margin-bottom:8px;">
+                    <div style="flex:2;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">Vehicle Make/Model & Plate Number</label>
+                        <input type="text" id="editDriverVehicle" placeholder="e.g. Skoda Superb (BD67 XYZ)" required>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">Vehicle Class</label>
+                        <select id="editDriverVehClass">
+                            <option value="Saloon">Saloon</option>
+                            <option value="Estate">Estate</option>
+                            <option value="MPV">MPV</option>
+                            <option value="Minibus-7">Minibus-7</option>
+                            <option value="Minibus-8">Minibus-8</option>
+                            <option value="Executive">Executive</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; margin-bottom:8px;">
+                    <div style="flex:1;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">Commission %</label>
+                        <input type="number" step="1" id="editDriverComm" required>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">Badge Expiry</label>
+                        <input type="date" id="editDriverBadge">
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; margin-bottom:12px;">
+                    <div style="flex:1;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">MOT Expiry</label>
+                        <input type="date" id="editDriverMot">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">Insurance Expiry</label>
+                        <input type="date" id="editDriverIns">
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button type="button" class="btn-gray" onclick="closeAppModal('modalEditDriver')">Cancel</button>
+                    <button type="submit" class="btn-blue">💾 Update Driver & Vehicle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: EDIT CORPORATE ACCOUNT -->
+    <div id="modalEditAccount" class="modal-overlay" onclick="closeOverlayModal(event, 'modalEditAccount')">
+        <div class="modal-card" onclick="event.stopPropagation()" style="max-width:480px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:12px;">
+                <h3 style="margin:0; color:#38bdf8;">🏢 Amend Corporate Account</h3>
+                <button type="button" class="btn-red" style="width:auto; padding:2px 8px;" onclick="closeAppModal('modalEditAccount')">✕</button>
+            </div>
+            <form onsubmit="saveEditedAccount(event)">
+                <input type="hidden" id="editAccountNum">
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:0.8rem; color:#94a3b8;">Company Name</label>
+                    <input type="text" id="editAccountCompany" required>
+                </div>
+                <div style="display:flex; gap:8px; margin-bottom:8px;">
+                    <div style="flex:1;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">Discount %</label>
+                        <input type="number" step="0.5" id="editAccountDiscount" required>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:0.8rem; color:#94a3b8;">Payment Terms</label>
+                        <input type="text" id="editAccountTerms" value="30 Days Net">
+                    </div>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:0.8rem; color:#94a3b8;">Billing Email</label>
+                    <input type="email" id="editAccountEmail">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.8rem; color:#94a3b8;">Billing Address</label>
+                    <textarea id="editAccountAddress" rows="2"></textarea>
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button type="button" class="btn-gray" onclick="closeAppModal('modalEditAccount')">Cancel</button>
+                    <button type="submit" class="btn-blue">💾 Update Account</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- MODAL: EDIT / AMEND PLOT & STAND -->
+    <div id="modalEditPlot" class="modal-overlay" onclick="closeOverlayModal(event, 'modalEditPlot')">
+        <div class="modal-card" style="max-width: 500px; width: 100%;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:12px; margin-bottom:16px;">
+                <h3 style="margin:0; font-size:1.1rem; color:#38bdf8;">✏️ Amend Taxi Stand / Area Plot</h3>
+                <button type="button" class="btn-gray" style="padding:4px 10px;" onclick="closeAppModal('modalEditPlot')">✕</button>
+            </div>
+            <form onsubmit="savePlotAmend(event)">
+                <input type="hidden" id="editPlotId">
+                <div style="margin-bottom:12px;">
+                    <label style="display:block; font-size:0.8rem; color:#94a3b8; margin-bottom:4px;">Plot / Stand Code</label>
+                    <input type="text" id="editPlotCode" required class="input-dark" style="width:100%;" placeholder="e.g. PLOT-1">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="display:block; font-size:0.8rem; color:#94a3b8; margin-bottom:4px;">Name / Location</label>
+                    <input type="text" id="editPlotName" required class="input-dark" style="width:100%;" placeholder="e.g. Lansdown Stand">
+                </div>
+                <div style="display:flex; gap:10px; margin-bottom:12px;">
+                    <div style="flex:1;">
+                        <label style="display:block; font-size:0.8rem; color:#94a3b8; margin-bottom:4px;">Postcode / Sector</label>
+                        <input type="text" id="editPlotPostcodeSector" class="input-dark" style="width:100%;" placeholder="e.g. BA1">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="display:block; font-size:0.8rem; color:#94a3b8; margin-bottom:4px;">Type</label>
+                        <select id="editPlotType" class="input-dark" style="width:100%;">
+                            <option value="stand">🚕 FIFO Stand</option>
+                            <option value="polygon">🏘️ Area Sector</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px; margin-bottom:16px;">
+                    <div style="flex:1;">
+                        <label style="display:block; font-size:0.8rem; color:#94a3b8; margin-bottom:4px;">Radius (Meters)</label>
+                        <input type="number" id="editPlotRadius" class="input-dark" style="width:100%;" min="50" step="10">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="display:block; font-size:0.8rem; color:#94a3b8; margin-bottom:4px;">Max Capacity</label>
+                        <input type="number" id="editPlotCapacity" class="input-dark" style="width:100%;" min="1" step="1">
+                    </div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button type="button" class="btn-gray" onclick="closeAppModal('modalEditPlot')">Cancel</button>
+                    <button type="submit" class="btn-blue">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</body>
+</html>
+<script src="/bank-settings.js"></script>

@@ -415,6 +415,7 @@ app.get('/api/address-search', async (req, res) => {
 });
 
 
+
 app.use(express.urlencoded({ extended: true }));
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
@@ -660,15 +661,17 @@ function broadcastPlotQueueRanks(targetPlotId) {
 
     // Drivers not present in any queue get notified
     for (const [sid, d] of Object.entries(connectedDrivers)) {
-      if (d && d.driverId) {
-        let foundInAny = false;
-        let pName = d.currentPlot || "Standby";
-        for (const [pId, q] of Object.entries(plotQueues)) {
-          if ((q || []).some(x => x.driverId.toUpperCase() === d.driverId.toUpperCase())) {
-            foundInAny = true;
-            break;
-          }
-        }
+  if (d && d.driverId) {
+    let foundInAny = false;
+    // FIX: Use currentPlotName to match the rest of the backend
+    let pName = d.currentPlotName || "Standby"; 
+    
+    for (const [pId, q] of Object.entries(plotQueues)) {
+      if ((q || []).some(x => x.driverId.toUpperCase() === d.driverId.toUpperCase())) {
+        foundInAny = true;
+        break;
+      }
+    }
         if (!foundInAny && d.activeJobId == null) {
           d.plotRank = 0;
           d.totalInPlot = (plotQueues[pName] || []).length;
@@ -702,7 +705,9 @@ try {
   }
 }
 function initQueues() {
-  db.prepare('SELECT id FROM plots').all().forEach(p => { if (!plotQueues[p.id]) plotQueues[p.id] = []; });
+  db.prepare('SELECT name FROM plots').all().forEach(p => { 
+    if (!plotQueues[p.name]) plotQueues[p.name] = []; 
+  });
 }
 initQueues();
 
@@ -716,13 +721,15 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function updateDriverPlotPosition(driverId, lat, lng, driverStatus) {
+function updateDriverPlotPosition(driverId, lat, lng, driverStatus, socketId) {
   const allPlots = db.prepare('SELECT * FROM plots').all();
   let matchedPlot = null;
   let driverRank = null;
   let closestDist = Infinity;
   const numLat = parseFloat(lat);
   const numLng = parseFloat(lng);
+  const cleanDriverId = String(driverId).trim().toUpperCase();
+  const sessionKey = socketId || cleanDriverId;
 
   for (let p of allPlots) {
     const dist = getDistanceMeters(numLat, numLng, p.lat, p.lng);
@@ -733,24 +740,32 @@ function updateDriverPlotPosition(driverId, lat, lng, driverStatus) {
   }
 
   allPlots.forEach(p => {
-    if (!plotQueues[p.id]) plotQueues[p.id] = [];
-    const isInThisPlot = matchedPlot && (matchedPlot.id === p.id);
-    const existingIndex = plotQueues[p.id].findIndex(x => x.driverId.toUpperCase() === driverId.toUpperCase());
+    if (!plotQueues[p.name]) plotQueues[p.name] = [];
+    const isInThisPlot = matchedPlot && (matchedPlot.name === p.name);
+    
+    // Match by sessionKey (socketId) to keep multi-device logins separate in the queue
+    const existingIndex = plotQueues[p.name].findIndex(x => (x.socketId === sessionKey) || (x.driverId.toUpperCase() === cleanDriverId && !x.socketId));
+    
     if (isInThisPlot && driverStatus === 'Available') {
-      if (existingIndex === -1) plotQueues[p.id].push({ driverId: driverId.toUpperCase(), enteredAt: Date.now() });
+      if (existingIndex === -1) {
+        plotQueues[p.name].push({ driverId: cleanDriverId, socketId: sessionKey, enteredAt: Date.now() });
+      }
     } else {
-      if (existingIndex !== -1) plotQueues[p.id].splice(existingIndex, 1);
+      if (existingIndex !== -1) {
+        plotQueues[p.name].splice(existingIndex, 1);
+      }
     }
   });
 
   if (matchedPlot) {
-    const qIndex = (plotQueues[matchedPlot.id] || []).findIndex(x => x.driverId.toUpperCase() === driverId.toUpperCase());
+    const qIndex = (plotQueues[matchedPlot.name] || []).findIndex(x => (x.socketId === sessionKey) || (x.driverId.toUpperCase() === cleanDriverId && !x.socketId));
     driverRank = (qIndex !== -1 && driverStatus === "Available") ? qIndex + 1 : null;
   }
   return { matchedPlot, driverRank };
 }
 
 let connectedDrivers = {};
+
 
 function findDriverSocket(targetId) {
   if (!targetId) return null;
@@ -1605,10 +1620,11 @@ io.on('connection', (socket) => {
       if (!dId) return;
       console.log("⚡ Full Driver State Wakeup Sync received for " + dId);
       
+      // 🔍 Fetch driverObj from database so it's defined!
+      const driverObj = db.prepare("SELECT * FROM drivers WHERE UPPER(driverId) = ? LIMIT 1").get(dId);
+
       // 1. Check active or offered job
-      const activeJob = db.prepare(
-        "SELECT * FROM bookings WHERE UPPER(assignedDriverId) = ? AND status IN ('Offered', 'OFFERED', 'Accepted', 'ACCEPTED', 'Arrived', 'ARRIVED', 'POB') LIMIT 1"
-      ).get(dId);
+      const activeJob = db.prepare("SELECT * FROM bookings WHERE UPPER(assignedDriverId) = ? AND status IN ('Accepted', 'ACCEPTED', 'Arrived', 'ARRIVED', 'POB') LIMIT 1").get(dId);
 
       if (activeJob) {
         socket.emit("job_offer", activeJob);
@@ -1623,9 +1639,7 @@ io.on('connection', (socket) => {
         socket.emit("bid_board_list", bidBoardJobs);
       } catch(e) {}
 
-      
       // 3. Check stand rank info and auto-re-queue driver if they were on a plot
-      /* removed duplicate */
       if (driverObj && driverObj.currentPlot) {
         const pName = driverObj.currentPlot;
         
@@ -1653,16 +1667,6 @@ io.on('connection', (socket) => {
         if (typeof broadcastPlotQueueRanks === "function") broadcastPlotQueueRanks(pName);
       }
 
-      /* removed duplicate */
-      if (driverObj && driverObj.currentPlot) {
-        const pName = driverObj.currentPlot;
-        const queue = plotQueues[pName] || [];
-        const index = queue.findIndex(q => q.driverId.toUpperCase() === dId);
-        const rank = index !== -1 ? index + 1 : null;
-        const total = queue.length;
-        socket.emit("stand_rank_update", { plotName: pName, rank, total });
-      }
-
       socket.emit("wallet_refresh_needed");
       console.log("✅ Full state sync delivered to woken driver " + dId);
     } catch(e) {
@@ -1671,60 +1675,63 @@ io.on('connection', (socket) => {
   });
 
 
-  socket.on("disconnect", () => {
+ socket.on("disconnect", () => {
     const d = connectedDrivers[socket.id];
     if (d) {
       const dId = (d.driverId || "").toUpperCase();
       const dName = d.name;
       console.log(`🔌 Driver socket disconnected: ${dName} (${dId}) - preserving stand rank (45s grace)`);
       delete connectedDrivers[socket.id];
-
+      
       // Delay queue eviction to survive tab reloads and brief network blips
       setTimeout(() => {
-        const isReconnected = Object.values(connectedDrivers).some(x => (x.driverId || "").toUpperCase() === dId);
-        if (isReconnected) {
-          console.log(`🛡️ Driver ${dName} (${dId}) is actively connected on another socket. Stand rank preserved.`);
-          return;
-        }
-        if (!isReconnected) {
+        const stillConnected = Object.values(connectedDrivers).some(
+          (cd) => (cd.driverId || "").toUpperCase() === dId
+        );
+        if (!stillConnected) {
           console.log(`⏰ Reconnect grace expired for ${dName} (${dId}). Evicting from stand.`);
-          for (const p of Object.keys(plotQueues)) {
-            plotQueues[p] = (plotQueues[p] || []).filter(x => x.driverId.toUpperCase() !== dId);
+          for (const pName of Object.keys(plotQueues)) {
+            plotQueues[pName] = plotQueues[pName].filter(
+              (q) => q.driverId.toUpperCase() !== dId
+            );
           }
-          broadcastPlotQueueRanks();
-          broadcastAdminState();
+          if (typeof broadcastPlotQueueRanks === "function") {
+            broadcastPlotQueueRanks();
+          }
         }
       }, 45000);
     }
   });
-
-  
-  socket.on("driver_switch_plot", (data) => {
+socket.on("driver_switch_plot", (data) => {
     try {
-      const d = connectedDrivers[socket.id];
-      if (!d) return;
-      const newPlot = (data && data.plotName) ? data.plotName.trim() : "Larkhall";
-      const dId = d.driverId.toUpperCase();
-
-      // Remove from all plots
-      for (const p of Object.keys(plotQueues)) {
-        plotQueues[p] = (plotQueues[p] || []).filter(x => x.driverId.toUpperCase() !== dId);
-      }
-      if (!plotQueues[newPlot]) plotQueues[newPlot] = [];
-      plotQueues[newPlot].push({ driverId: dId, enteredAt: Date.now() });
-      d.currentPlotName = newPlot;
-      console.log(`📍 Driver ${dId} moved to stand ${newPlot}`);
-      broadcastPlotQueueRanks();
-    } catch(e) {}
-  });
-
-  socket.on("driver_login", (data) => {
+        const d = connectedDrivers[socket.id];
+        if (!d) return;
+        const newPlot = (data && data.plotName) ? data.plotName.trim() : "Larkhall";
+        const dId = d.driverId.toUpperCase();
+        
+        for (const p of Object.keys(plotQueues)) {
+            plotQueues[p] = (plotQueues[p] || []).filter(x => x.driverId.toUpperCase() !== dId);
+        }
+        
+        if (!plotQueues[newPlot]) plotQueues[newPlot] = [];
+        plotQueues[newPlot].push({ driverId: dId, enteredAt: Date.now() });
+        
+        d.currentPlotName = newPlot;
+        console.log(`📍 Driver ${dId} moved to stand ${newPlot}`);
+        broadcastPlotQueueRanks();
+    } catch(e) {
+        console.error("Error in driver_switch_plot:", e.message);
+    }
+});
+// --- 1. UNIFIED DRIVER LOGIN HANDLER ---
+socket.on("driver_login", (data) => {
     try {
       const driverId = (data.driverId || "").toUpperCase().trim();
       const pin = String(data.pin || "").trim();
       const clientDeviceId = String(data.deviceId || "").trim();
 
       const driver = db.prepare("SELECT * FROM drivers WHERE UPPER(driverId) = ? LIMIT 1").get(driverId);
+      
       if (!driver) {
         return socket.emit("login_result", { success: false, message: "Driver ID not found" });
       }
@@ -1733,46 +1740,29 @@ io.on('connection', (socket) => {
         return socket.emit("login_result", { success: false, message: "Invalid PIN" });
       }
 
-      // STRICT HARDWARE DEVICE ENFORCEMENT
+      try {
+        db.prepare("UPDATE drivers SET status = 'Available', activeJobId = NULL WHERE UPPER(driverId) = ?").run(driverId);
+        driver.status = "Available";
+      } catch(e) {}
+
+      // Clear old sockets for this driver ID if active on another connection
       for (const [oldSid, d] of Object.entries(connectedDrivers)) {
         if (d.driverId.toUpperCase() === driverId && oldSid !== socket.id) {
           const oldSock = io.sockets.sockets.get(oldSid);
-          const isOldSockAlive = oldSock && oldSock.connected;
-
-          if (isOldSockAlive && d.deviceId && clientDeviceId && d.deviceId !== clientDeviceId) {
-            console.log(`🚫 REJECTED login for ${driverId}: active on device ${d.deviceId}, attempt from ${clientDeviceId}`);
-            return socket.emit("login_result", {
-              success: false,
-              message: "Driver " + driverId + " is currently active on another device (" + d.deviceId.substring(0, 10) + "...). Please log off from your other handset first."
-            });
-          }
-
-          if (oldSock) {
-            oldSock.disconnect(true);
-          }
+          if (oldSock) oldSock.disconnect(true);
           delete connectedDrivers[oldSid];
         }
       }
 
-      const activeTrip = db.prepare(
-        "SELECT * FROM bookings WHERE UPPER(assignedDriverId) = ? AND status IN ('Accepted', 'ACCEPTED', 'Arrived', 'ARRIVED', 'POB') LIMIT 1"
-      ).get(driverId);
+      const activeTrip = db.prepare("SELECT * FROM bookings WHERE UPPER(assignedDriverId) = ? AND status IN ('Accepted', 'ACCEPTED', 'Arrived', 'ARRIVED', 'POB') LIMIT 1").get(driverId);
 
       socket.driverId = driverId;
 
-      // Determine Stand / Plot Queue Rank
-      const defaultPlot = "Larkhall";
-      if (!plotQueues[defaultPlot]) plotQueues[defaultPlot] = [];
-      plotQueues[defaultPlot] = plotQueues[defaultPlot].filter(x => x.driverId.toUpperCase() !== driverId);
-      if (!activeTrip) {
-        plotQueues[defaultPlot].push({ driverId: driverId, enteredAt: Date.now() });
-      }
+     // Check if client sent real lat/lng in the login packet
+      const initialLat = (typeof data.lat === 'number') ? data.lat : null;
+      const initialLng = (typeof data.lng === 'number') ? data.lng : null;
 
-      const qList = plotQueues[defaultPlot] || [];
-      const myCalculatedRank = activeTrip ? 0 : qList.findIndex(x => x.driverId.toUpperCase() === driverId) + 1;
-      const totalInPlotCount = qList.length;
-
-      // REGISTER DRIVER FIRST so broadcastPlotQueueRanks finds this socket!
+      // Initialize session object as Standby if no GPS yet
       connectedDrivers[socket.id] = {
         deviceId: clientDeviceId,
         socketId: socket.id,
@@ -1783,93 +1773,132 @@ io.on('connection', (socket) => {
         vehicleClass: driver.vehicleClass || "Standard",
         status: activeTrip ? "On Job" : "Available",
         activeJobId: activeTrip ? activeTrip.id : null,
-        currentPlotName: defaultPlot,
-        plotRank: myCalculatedRank,
-        totalInPlot: totalInPlotCount,
-        lat: 51.3811,
-        lng: -2.3590,
+        currentPlotName: "Standby",
+        plotName: "Standby",
+        plotRank: 0,
+        lat: initialLat,
+        lng: initialLng,
         lastSeen: new Date().toISOString()
       };
 
-      console.log(`✅ Driver logged in: ${driver.name} (${driverId}) on ${defaultPlot} - Rank #${myCalculatedRank} of ${totalInPlotCount}`);
+      let matchedPlotObj = null;
+      let calculatedRank = 0;
+      let totalInPlotCount = 0;
 
-      // Broadcast fresh ranks to EVERYONE
-      broadcastPlotQueueRanks(defaultPlot);
+      // Only run spatial check if real coordinates were provided on login
+      // Only run spatial check if real coordinates were provided on login
+      if (initialLat !== null && initialLng !== null && typeof updateDriverPlotPosition === "function") {
+        const spatialResult = updateDriverPlotPosition(driverId, initialLat, initialLng, connectedDrivers[socket.id].status, socket.id);
+        if (spatialResult && spatialResult.matchedPlot) {
+            matchedPlotObj = spatialResult.matchedPlot;
+            calculatedRank = spatialResult.driverRank || 0;
+            totalInPlotCount = plotQueues[matchedPlotObj.name] ? plotQueues[matchedPlotObj.name].length : 0;
+        }
+      }
 
-      // Send login success directly to this socket
+      connectedDrivers[socket.id].currentPlotName = matchedPlotObj ? matchedPlotObj.name : "Standby";
+      connectedDrivers[socket.id].plotName = matchedPlotObj ? matchedPlotObj.name : "Standby";
+      connectedDrivers[socket.id].plotRank = calculatedRank;
+
+      broadcastPlotQueueRanks();
+
       socket.emit("login_result", {
         success: true,
         driver: connectedDrivers[socket.id],
         activeTrip: activeTrip || null
       });
 
-      // Deliver all existing Open For Bidding jobs directly to this driver handset
-      try {
-        const currentBids = db.prepare("SELECT * FROM bookings WHERE status = 'Open For Bidding'").all();
-        currentBids.forEach(b => socket.emit("open_job_for_bidding", b));
-      } catch(e) {}
-
-      // Re-deliver any active, unexpired 15s job offer if driver reconnected mid-offer
-      try {
-        if (typeof activeOfferTimers !== 'undefined') {
-          for (const [offerJobId, timer] of Object.entries(activeOfferTimers)) {
-            if (timer) {
-              const pendingJob = db.prepare("SELECT * FROM bookings WHERE id = ?").get(offerJobId);
-              if (pendingJob && !['Accepted', 'ACCEPTED', 'Arrived', 'ARRIVED', 'POB', 'Completed', 'COMPLETED', 'Cancelled'].includes(pendingJob.status)) {
-                socket.emit("job_offer", pendingJob);
-                console.log(`🔄 Re-delivered active 15s offer for #${pendingJob.id} to reconnected driver ${driverId}`);
-              }
-            }
-          }
-        }
-      } catch(e) {
-        console.error("Error re-delivering active offer:", e.message);
-      }
-
-      // Send targeted queue_update so handset never waits
       socket.emit("queue_update", {
-        plotName: defaultPlot,
-        plotRank: myCalculatedRank,
+        plotName: connectedDrivers[socket.id].plotName,
+        plotRank: calculatedRank,
         totalInPlot: totalInPlotCount
       });
 
-      // Dispatched earnings push
-      try {
-        const walletRows = db.prepare("SELECT fare FROM bookings WHERE UPPER(assignedDriverId) = ? AND status IN ('Completed', 'COMPLETED')").all(driverId);
-        const gross = walletRows.reduce((sum, r) => sum + (parseFloat(r.fare) || 0), 0);
-        const net = gross * 0.8;
-        socket.emit("wallet_update", {
-          grossEarnings: gross.toFixed(2),
-          netEarnings: net.toFixed(2),
-          jobsCompleted: walletRows.length
-        });
-      } catch(e) {}
+      const allDrivers = db.prepare("SELECT * FROM drivers").all();
+      io.emit("update_driver_list", allDrivers);
 
-      broadcastAdminState();
+      console.log(`✅ Driver ${driverId} logged in successfully with Stand: ${connectedDrivers[socket.id].plotName} (Rank: ${calculatedRank})`);
     } catch (err) {
       console.error("Error in driver_login:", err.message);
       socket.emit("login_result", { success: false, message: "Server error during login" });
     }
-  });
+});
 
-  socket.on('driver_location_update', (coords) => {
-    const d = connectedDrivers[socket.id];
-    if (!d || !coords) return;
-    d.lat = coords.lat;
-    d.lng = coords.lng;
+  // --- 2. SINGLE, UNIFIED GPS & LOCATION UPDATE HANDLER ---
+socket.on("driver_location_update", (data) => {
+    const coords = (data && typeof data.lat === "number") ? data : (data && data.coords ? data.coords : null);
+    const reportedDriverId = (data && data.driverId) ? data.driverId.toUpperCase().trim() : (socket.driverId || null);
 
-    if (typeof updateDriverPlotPosition === 'function') {
-      updateDriverPlotPosition(d.driverId, coords.lat, coords.lng, d.status);
+    let d = connectedDrivers[socket.id];
+
+    // Self-healing fallback: re-map if socket ID changed on reconnect/refresh
+    if (!d && reportedDriverId) {
+        for (const [sid, driverObj] of Object.entries(connectedDrivers)) {
+            if (driverObj.driverId && driverObj.driverId.toUpperCase() === reportedDriverId) {
+                d = driverObj;
+                connectedDrivers[socket.id] = d;
+                break;
+            }
+        }
     }
 
-    io.emit('driver_pos_broadcast', {
+    // Auto-register session if completely missing from memory
+    if (!d && reportedDriverId) {
+        const driverRecord = db.prepare("SELECT * FROM drivers WHERE UPPER(driverId) = ? LIMIT 1").get(reportedDriverId);
+        if (driverRecord) {
+            socket.driverId = reportedDriverId;
+            d = {
+                socketId: socket.id,
+                driverId: driverRecord.driverId,
+                name: driverRecord.name,
+                phone: driverRecord.phone,
+                vehicle: driverRecord.vehicle,
+                vehicleClass: driverRecord.vehicleClass || "Standard",
+                status: "Available",
+                activeJobId: null,
+                currentPlotName: "Standby",
+                plotName: "Standby",
+                plotRank: 0,
+                lat: coords ? coords.lat : null,
+                lng: coords ? coords.lng : null,
+                lastSeen: new Date().toISOString()
+            };
+            connectedDrivers[socket.id] = d;
+        }
+    }
+
+    if (!d || !coords) return;
+
+    d.lat = coords.lat;
+    d.lng = coords.lng;
+    d.lastSeen = new Date().toISOString();
+
+    if (typeof updateDriverPlotPosition === "function") {
+        const spatialRes = updateDriverPlotPosition(d.driverId, coords.lat, coords.lng, d.status);
+        if (spatialRes && spatialRes.matchedPlot) {
+            d.currentPlotName = spatialRes.matchedPlot.name;
+            d.plotName = spatialRes.matchedPlot.name;
+            d.plotRank = spatialRes.driverRank || 0;
+        } else {
+            d.currentPlotName = "Standby";
+            d.plotName = "Standby";
+            d.plotRank = 0;
+        }
+    }
+
+    broadcastPlotQueueRanks();
+
+    io.emit("driver_pos_broadcast", {
       driverId: d.driverId,
       name: d.name,
       status: d.status,
       lat: coords.lat,
       lng: coords.lng
     });
-  });
+}); 
+
+    
+  
 
   // 9. DRIVER TRIP LIFECYCLE
     // FASTEST FINGER: OPEN BID BOARD CLAIM

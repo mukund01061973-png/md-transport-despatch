@@ -1,0 +1,1859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MD Transport Driver Terminal</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; background: #0f172a; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .login-wrap { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .login-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; width: 100%; max-width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .app-shell { display: none; max-width: 520px; margin: 0 auto; min-height: 100vh; padding-bottom: 70px; }
+        .hdr-bar { background: #1e293b; border-bottom: 1px solid #334155; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+        .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px 12px; margin: 8px; }
+        .btn { display: inline-flex; justify-content: center; align-items: center; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; text-decoration: none; border: none; font-size: 0.85rem; }
+        .btn-green { background: #10b981; color: #fff; }
+        .btn-blue { background: #0284c7; color: #fff; }
+        .btn-orange { background: #f59e0b; color: #fff; }
+        .btn-red { background: #ef4444; color: #fff; }
+        .btn-secondary { background: #334155; color: #cbd5e1; border: 1px solid #475569; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #1e293b; border-top: 1px solid #334155; display: flex; height: 56px; z-index: 999; }
+        .nav-btn { flex: 1; background: none; border: none; color: #94a3b8; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.75rem; cursor: pointer; }
+        .nav-btn.active { color: #38bdf8; font-weight: bold; }
+        .offer-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.96); z-index: 9999; flex-direction: column; justify-content: center; padding: 20px; text-align: center; }
+        .countdown-bar { height: 6px; background: #10b981; width: 100%; border-radius: 3px; margin: 12px 0; transition: width 1s linear; }
+    </style>
+</head>
+<body>
+
+    <!-- SIGN IN VIEW -->
+    <div id="loginScreen" class="login-wrap">
+        <div class="login-box">
+            <h2 style="color:#38bdf8; margin:0 0 4px 0; text-align:center;">MD Transport</h2>
+            <div style="color:#94a3b8; font-size:0.85rem; text-align:center; margin-bottom:16px;">Driver Terminal Sign-On</div>
+            
+            <label style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase;">Callsign / Driver ID</label>
+            <input type="text" id="loginDriverId" value="" style="width:100%; padding:10px; background:#0f172a; border:1px solid #334155; color:#fff; border-radius:6px; margin:4px 0 12px 0; font-size:1rem; text-transform:uppercase;">
+
+            <label style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase;">Security PIN</label>
+            <input type="password" id="loginPin" value="" style="width:100%; padding:10px; background:#0f172a; border:1px solid #334155; color:#fff; border-radius:6px; margin:4px 0 16px 0; font-size:1rem;">
+
+            <button type="button" id="btnDriverLogin" class="btn btn-green" style="width:100%; padding:14px; font-size:1.1rem; cursor:pointer;" onclick="submitDriverLogin()">
+    🟢 Sign On Shift &amp; Enable Audio
+</button>
+        </div>
+    </div>
+
+    <!-- MAIN TERMINAL APP -->
+    <div id="appContainer" class="app-shell">
+        <div class="hdr-bar">
+            <div>
+                <strong id="hdrDriverId" style="color:#38bdf8; font-size:1.05rem;">MUKUND</strong>
+                <span id="hdrVehClass" style="font-size:0.75rem; color:#94a3b8; margin-left:4px;">Minibus 8</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+                <span id="hdrQueueRank" style="font-size:0.8rem; background:#0f172a; padding:4px 8px; border-radius:6px; border:1px solid #334155;">🚕 Stand: Available</span>
+                <button type="button" class="btn btn-red" style="padding:4px 8px; font-size:0.75rem;" onclick="driverLogOff()">🔴 Log Off</button>
+            </div>
+        </div>
+
+        <!-- 1. ACTIVE SHIFT TAB -->
+        <div id="viewShift" class="view-content">
+            <div id="noTripSection" class="card" style="text-align:center; padding:20px 14px;">
+                <div style="font-size:2.2rem; margin-bottom:4px;">🟢</div>
+                <h3 style="margin:0; color:#10b981; font-size:1.15rem;">Available on Stand</h3>
+                <p style="color:#94a3b8; font-size:0.8rem; margin:4px 0 10px 0;">Standing by for automated FIFO dispatch or bid broadcast.</p>
+                <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                    <div style="background:#0f172a; padding:8px 14px; border-radius:8px; border:1px solid #334155; font-size:0.85rem;" id="dispPlotInfo">
+                        📍 Stand: <strong id="curPlotNameTxt" style="color:#38bdf8;">Larkhall</strong> • Queue: <strong id="curPlotRankTxt" style="color:#10b981;">Position #1 of 1</strong>
+                    </div>
+                    <button type="button" class="btn" style="background:#0369a1; color:#fff; padding:8px 14px; font-size:0.85rem; border-radius:8px; border:none; cursor:pointer; font-weight:700;" onclick="openStandsModal()">
+                        📍 Stands (<span id="btnStandsBadge">0</span>)
+                    </button>
+                </div>
+
+                <!-- STANDS DIRECTORY MODAL -->
+                <div id="standsModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:9999; align-items:center; justify-content:center; padding:16px;">
+                    <div style="background:#0f172a; border:1px solid #334155; border-radius:12px; max-width:460px; width:100%; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
+                        <div style="padding:14px 18px; border-bottom:1px solid #1e293b; display:flex; justify-content:space-between; align-items:center; background:#1e293b;">
+                            <div>
+                                <h3 style="margin:0; font-size:1.1rem; color:#f8fafc;">📍 Live Stands Directory</h3>
+                                <p style="margin:2px 0 0; font-size:0.75rem; color:#94a3b8;">Driver distribution across Bath plots</p>
+                            </div>
+                            <button type="button" onclick="closeStandsModal()" style="background:#334155; border:none; color:#fff; border-radius:6px; padding:6px 10px; cursor:pointer; font-weight:bold;">✕</button>
+                        </div>
+                        <div id="standsDirectoryList" style="padding:14px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
+                            <div style="text-align:center; color:#64748b; padding:20px;">Fetching live stand data...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Live Plot Stand Density Ledger -->
+                <div style="background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:10px; margin-top:10px; text-align:left;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:0.75rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">📡 Live Plot Stand Density</span>
+                        <span style="font-size:0.7rem; color:#64748b;">Drivers on Stand</span>
+                    </div>
+                    <div id="plotDensityList" style="display:flex; flex-wrap:wrap; gap:6px; font-size:0.75rem;">
+                        <span style="color:#64748b;">Loading stand distribution...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Trip Card -->
+            
+            <!-- FOLLOW-UP / BACK-TO-BACK QUEUED TRIP BANNER -->
+        <div id="followUpTripCard" style="display:none; background:#1e1b4b; border:1px solid #4338ca; border-radius:6px; padding:6px 10px; margin-bottom:8px; font-size:0.75rem;">
+    <div style="display:flex; justify-content:space-between; align-items:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+        <div style="overflow:hidden; text-overflow:ellipsis;">
+            <span style="color:#a5b4fc; font-weight:bold; margin-right:4px;">⚡ Queued:</span>
+            <strong id="fuId" style="color:#fff; margin-right:6px;">#JOB-XXXXXX</strong>
+            <span id="fuSummary" style="color:#cbd5e1;">Pickup ➔ Dropoff</span>
+        </div>
+        <span style="color:#34d399; font-weight:bold; font-size:0.85rem; margin-left:8px;" id="fuFare">£0.00</span>
+    </div>
+</div>
+
+        <div id="activeTripCard" class="card" style="display:none; border-color:#38bdf8; padding:10px 12px; background:#1e293b;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span id="tripStatusBadge" style="background:#0284c7; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold;">ACCEPTED</span>
+                        <span id="tripPaymentBadge" style="background:#f59e0b; color:#000; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold;">CASH</span>
+                    </div>
+                    <strong style="font-size:1.35rem; color:#10b981;">£<span id="tripFare">0.00</span></strong>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <div>
+                        <span id="tripPassenger" style="font-size:0.95rem; font-weight:700; color:#fff;">Passenger</span>
+                        <span id="tripPaxVeh" style="font-size:0.75rem; color:#94a3b8; margin-left:4px;">• 1 Pax</span>
+                    </div>
+                    <a id="tripPhoneBtn" href="#" class="btn btn-secondary" style="padding:2px 8px; font-size:0.75rem; color:#38bdf8; border-color:#38bdf8; text-decoration:none;">
+                        📞 <span id="tripPhone">Call</span>
+                    </a>
+                </div>
+
+                <!-- Addresses -->
+                <div style="background:#0f172a; padding:8px 10px; border-radius:6px; font-size:0.85rem; border:1px solid #334155; margin-bottom:6px;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="color:#10b981; font-weight:700; min-width:55px;">Pickup:</span>
+                        <span id="tripPickup" style="color:#f8fafc; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">-</span>
+                    </div>
+                    <div id="boxViaStops" style="display:none; margin-top:4px; padding-top:4px; border-top:1px dashed #334155; font-size:0.8rem;">
+                        <span style="color:#f59e0b; font-weight:700; min-width:55px;">Stops:</span>
+                        <span id="tripVia" style="color:#cbd5e1;">-</span>
+                    </div>
+                    <div id="boxDropoff" style="margin-top:4px; padding-top:4px; border-top:1px dashed #334155; display:flex; align-items:center; gap:6px;">
+                        <span style="color:#f43f5e; font-weight:700; min-width:55px;">Drop:</span>
+                        <span id="tripDropoff" style="color:#f8fafc; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">-</span>
+                    </div>
+                    <div id="tripNotesBox" style="display:none; margin-top:4px; padding-top:4px; border-top:1px dashed #334155; color:#fde047; font-size:0.75rem;">
+                        <span id="tripNotes"></span>
+                    </div>
+                </div>
+
+                <!-- WAITING & STOPOVER CHARGE PANEL -->
+                
+                    
+
+                <!-- POB EN-ROUTE STOPOVER BUTTON -->
+                
+
+                
+
+                <!-- Maps Navigation Button -->
+                <div id="activeViaHud" style="display:none; background:#0f172a; border:1px solid #334155; border-radius:6px; padding:8px; margin-bottom:6px; text-align:left;"></div>
+<button type="button" class="btn btn-blue" id="btnNavMaps" style="width:100%; margin-bottom:6px; padding:8px; font-weight:700; font-size:0.85rem;" onclick="openGoogleNavigation()">
+                    🗺️ Open Navigation to Pickup
+                </button>
+
+                <!-- Dynamic Sequential Button -->
+                <!-- DYNAMIC UNIFIED WAITING CONTROL -->
+                <div id="unifiedWaitingCard" style="display:none; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px; margin-bottom:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span id="waitCardTitle" style="font-size:0.85rem; font-weight:700; color:#38bdf8;">⏱️ Arrival Waiting Window</span>
+                        <span id="waitCardBadge" style="font-size:0.75rem; padding:2px 8px; border-radius:4px; background:#1e293b; color:#94a3b8; font-weight:700;">Free Grace</span>
+                    </div>
+
+                    <div id="waitClockDisplay" style="font-size:1.4rem; font-weight:900; color:#fde047; text-align:center; padding:8px; background:#1e293b; border-radius:6px; font-family:monospace; margin-bottom:8px;">
+                        05:00
+                    </div>
+
+                    <div id="waitActionBtnBox"></div>
+                </div>
+
+                <div id="driverReturnBox" style="text-align:right; margin-bottom:6px;"><button type="button" onclick="driverReturnJobToBase()" style="background:transparent; border:none; color:#f87171; font-size:0.8rem; font-weight:700; cursor:pointer; text-decoration:underline;">⚠️ Problem? Return Job to Base</button></div>
+                    <div id="lifecycleActionBtnContainer" style="display:block; margin:10px 0 12px 0; width:100%;">
+                    <button type="button" id="btnMainLifecycle" class="btn btn-blue" style="width:100%; padding:14px; font-size:1.1rem; font-weight:800; cursor:pointer;" onclick="transitionTrip('Arrived')">📍 Mark Arrived at Pickup</button>
+                </div>
+            </div>
+
+            <!-- Leaflet Driver Map Container -->
+            <div id="driverMap" style="height:190px; width:calc(100% - 16px); margin:8px; border-radius:8px; border:1px solid #334155;"></div>
+        </div>
+
+        <!-- 2. BIDDING VIEW -->
+        <div id="viewBidding" class="view-content" style="display:none;">
+            <div class="card">
+                <h3 style="margin-top:0; color:#38bdf8; font-size:1rem;">⚡ Open Jobs &amp; Bidding</h3>
+                <div id="biddingListContainer" style="color:#94a3b8; font-size:0.85rem;">No open jobs broadcast.</div>
+            </div>
+        </div>
+
+        <!-- 3. EARNINGS / WALLET VIEW -->
+        <div id="viewEarnings" class="view-content" style="display:none;">
+            <div class="card" style="padding:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h3 style="margin:0; color:#10b981; font-size:1.1rem;">💰 Shift Earnings &amp; Wallet</h3>
+                    <button class="btn btn-secondary" style="padding:4px 8px; font-size:0.75rem;" onclick="requestWalletUpdate()">🔄 Refresh</button>
+                </div>
+
+                <div class="grid-2" style="margin-bottom:8px;">
+                    <div style="background:#0f172a; padding:8px; border-radius:6px; text-align:center; border:1px solid #334155;">
+                        <div style="font-size:0.7rem; color:#94a3b8;">Total Gross</div>
+                        <div style="font-size:1.25rem; font-weight:bold; color:#10b981;" id="earnGross">£0.00</div>
+                    </div>
+                    <div style="background:#0f172a; padding:8px; border-radius:6px; text-align:center; border:1px solid #334155;">
+                        <div style="font-size:0.7rem; color:#94a3b8;">Jobs Run</div>
+                        <div style="font-size:1.25rem; font-weight:bold; color:#38bdf8;" id="earnJobsCount">0</div>
+                    </div>
+                </div>
+
+                <div class="grid-2" style="margin-bottom:10px;">
+                    <div style="background:#0f172a; padding:8px; border-radius:6px; text-align:center; border:1px solid #334155;">
+                        <div style="font-size:0.7rem; color:#94a3b8;">Cash Kept</div>
+                        <div style="font-size:1.1rem; font-weight:bold; color:#fde047;" id="earnCash">£0.00</div>
+                    </div>
+                    <div style="background:#0f172a; padding:8px; border-radius:6px; text-align:center; border:1px solid #334155;">
+                        <div style="font-size:0.7rem; color:#94a3b8;">Card / Prepaid</div>
+                        <div style="font-size:1.1rem; font-weight:bold; color:#38bdf8;" id="earnCard">£0.00</div>
+                    </div>
+                </div>
+
+                <div style="background:#0f172a; padding:8px 10px; border-radius:6px; border:1px solid #334155; margin-bottom:10px; font-size:0.85rem;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:#94a3b8;">Base Commission (<span id="earnCommPct">20</span>%):</span>
+                        <strong style="color:#ef4444;" id="earnCommCut">-£0.00</strong>
+                    </div>
+                    <div style="border-top:1px solid #334155; padding-top:4px; display:flex; justify-content:space-between; font-size:0.95rem;">
+                        <span style="color:#fff; font-weight:bold;">Driver Net Settlement:</span>
+                        <strong style="color:#10b981;" id="earnNetSettlement">£0.00</strong>
+                    </div>
+                </div>
+
+                <h4 style="margin:8px 0 6px 0; color:#cbd5e1; font-size:0.85rem;">Completed Runs Log</h4>
+                <div id="walletRunsList" style="max-height:180px; overflow-y:auto; font-size:0.8rem; background:#0f172a; padding:6px; border-radius:6px; border:1px solid #334155;">
+                    <div style="color:#64748b; text-align:center; padding:8px;">No completed trips yet.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM TAB BAR -->
+        <div class="bottom-nav">
+            <button class="nav-btn active" id="tabShift" onclick="switchTab('Shift')"><span>🚕</span>Shift</button>
+            <button class="nav-btn" id="tabBidding" onclick="switchTab('Bidding')"><span>⚡</span>Bidding</button>
+            <button class="nav-btn" id="tabEarnings" onclick="switchTab('Earnings')"><span>💰</span>Earnings</button>
+        </div>
+    </div>
+
+    <!-- INCOMING OFFER OVERLAY -->
+    <div id="offerModal" class="offer-overlay">
+        <h2 style="color:#38bdf8; margin:0;">⚡ NEW DISPATCH OFFER</h2>
+        <div style="font-size:2.2rem; font-weight:900; color:#10b981; margin:8px 0;">£<span id="offFare">0.00</span></div>
+        <div style="background:#1e293b; padding:14px; border-radius:10px; text-align:left; border:1px solid #334155;">
+            <div style="font-size:1.1rem; font-weight:bold; margin-bottom:4px;" id="offPassenger">Passenger</div>
+            <div><strong>From:</strong> <span id="offPickup">-</span></div>
+            <div style="margin-top:4px;"><strong>To:</strong> <span id="offDropoff">-</span></div>
+            <div style="margin-top:4px; color:#fde047;" id="offPaxVeh">1 Pax • Standard</div>
+        </div>
+        <div class="countdown-bar" id="offBar"></div>
+        <div class="grid-2" style="margin-top:14px;">
+            <button type="button" class="btn btn-red" onclick="respondToOffer('REJECTED')">✕ Pass</button>
+            <button type="button" class="btn btn-green" onclick="respondToOffer('ACCEPTED')">✓ Accept Run</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // GLOBAL CONTROLLER HANDLERS
+        
+        window.allStandsData = [];
+        window.myCurrentPlot = "Larkhall";
+        window.myCurrentRank = "Position #1 of 1";
+
+        window.openStandsModal = function() {
+            const modal = document.getElementById("standsModal");
+            if (modal) modal.style.display = "flex";
+            renderStandsList();
+        };
+
+        window.closeStandsModal = function() {
+            const modal = document.getElementById("standsModal");
+            if (modal) modal.style.display = "none";
+        };
+
+        window.switchDriverPlot = function(targetPlot) {
+            if (!confirm("Move your taxi to " + targetPlot + " stand?")) return;
+            if (window.socket) {
+                window.socket.emit("driver_switch_plot", { plotName: targetPlot });
+            }
+            window.myCurrentPlot = targetPlot;
+            closeStandsModal();
+        };
+
+        function renderStandsList() {
+            const container = document.getElementById("standsDirectoryList");
+            if (!container) return;
+            container.innerHTML = "";
+
+            if (!window.allStandsData || window.allStandsData.length === 0) {
+                container.innerHTML = "<div style='text-align:center; color:#64748b; padding:20px;'>No plots found.</div>";
+                return;
+            }
+
+            // Current stand always pinned first
+            const sorted = [...window.allStandsData].sort((a, b) => {
+                if (a.plotName === window.myCurrentPlot) return -1;
+                if (b.plotName === window.myCurrentPlot) return 1;
+                return b.count - a.count;
+            });
+
+            sorted.forEach(p => {
+                const isCurrent = (p.plotName === window.myCurrentPlot);
+                const card = document.createElement("div");
+                card.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-radius:8px; border:1px solid " + (isCurrent ? "#0284c7" : "#1e293b") + "; background:" + (isCurrent ? "#0369a1" : "#1e293b") + ";";
+                
+                const leftDiv = document.createElement("div");
+                leftDiv.innerHTML = "<div style='font-weight:700; font-size:0.95rem; color:" + (isCurrent ? "#ffffff" : "#f8fafc") + ";'>" + (isCurrent ? "📍 " : "") + p.plotName + (isCurrent ? " <span style='font-size:0.75rem; background:#0284c7; padding:2px 6px; border-radius:4px; margin-left:4px;'>CURRENT</span>" : "") + "</div>" +
+                                    "<div style='font-size:0.75rem; color:" + (isCurrent ? "#e0f2fe" : "#94a3b8") + "; margin-top:2px;'>" + (isCurrent ? window.myCurrentRank : (p.count === 0 ? "Empty Stand • Instant #1" : p.count + " active " + (p.count === 1 ? "taxi" : "taxis"))) + "</div>";
+                
+                const rightDiv = document.createElement("div");
+                if (isCurrent) {
+                    rightDiv.innerHTML = "<span style='font-size:1.1rem; font-weight:800; color:#38bdf8;'>" + p.count + " 🚕</span>";
+                } else {
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.textContent = "Move Here";
+                    btn.style.cssText = "background:#0f172a; border:1px solid #334155; color:#38bdf8; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:700; font-size:0.75rem;";
+                    btn.onclick = function() { window.switchDriverPlot(p.plotName); };
+                    rightDiv.appendChild(btn);
+                }
+
+                card.appendChild(leftDiv);
+                card.appendChild(rightDiv);
+                container.appendChild(card);
+            });
+        }
+
+        window.driverLogOff = function() {
+            if (!confirm("Are you sure you want to log off from MD Transport?")) return;
+            localStorage.clear();
+            sessionStorage.clear();
+            const activeDId = (window.myDriver && (window.myDriver.driverId || window.myDriver.id)) ||
+                              sessionStorage.getItem("driverId") ||
+                              localStorage.getItem("driverId") ||
+                              (typeof myDriverId !== "undefined" ? myDriverId : "");
+
+            if (typeof socket !== "undefined" && socket && socket.connected) {
+                console.log("📤 Emitting immediate driver_logout for:", activeDId);
+                socket.emit("driver_logout", { driverId: activeDId });
+                // Small buffer so socket flush finishes before reload
+                setTimeout(() => {
+                    try { socket.disconnect(); } catch(e) {}
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    window.location.reload();
+                }, 100);
+            } else {
+                localStorage.clear();
+                sessionStorage.clear();
+                window.location.reload();
+            }
+        };
+
+        window.dialPassengerDirect = function() {
+            const p = window.activeTrip || window.activeJob;
+            const ph = (p && p.phone) ? p.phone : (document.getElementById("tripPhone") ? document.getElementById("tripPhone").textContent : "");
+            if (ph && ph !== "Call" && ph !== "-") {
+                window.location.href = "tel:" + ph.replace(/\s+/g, "");
+            } else {
+                alert("No passenger phone number available for this booking.");
+            }
+        };
+
+        window.sendQuickDriverMsg = function(msgText) {
+            const myId = (window.myDriver && window.myDriver.driverId) || window.myDriverId || "MUKUND";
+            if (typeof socket !== "undefined") {
+                socket.emit("send_driver_message", {
+                    driverId: myId,
+                    message: msgText
+                });
+            }
+            alert("✓ Sent to Base: " + msgText);
+        };
+
+
+    // Reliable Socket.IO Client Instantiation
+    if (typeof io !== "undefined" && (!window.socket || !window.socket.connected)) {
+        window.socket = io({ reconnection: true });
+        var socket = window.socket;
+    }
+
+    function submitDriverLogin() {
+        try {
+            if (typeof initAudio === "function") initAudio();
+        } catch(e) {}
+
+        if (!window.socket && typeof io !== "undefined") {
+            window.socket = io({ reconnection: true });
+        }
+
+        var idInput = document.getElementById("loginDriverId");
+        var pinInput = document.getElementById("loginPin");
+        var driverId = (idInput && idInput.value ? idInput.value : "MUKUND").trim().toUpperCase() || "MUKUND";
+        var pin = (pinInput && pinInput.value ? pinInput.value : "1234").trim() || "1234";
+
+        // Persistent Hardware Device Fingerprint
+        let deviceToken = localStorage.getItem("md_device_uuid");
+        if (!deviceToken) {
+            deviceToken = "DEV-" + Math.random().toString(36).substring(2, 12).toUpperCase() + "-" + Date.now();
+            localStorage.setItem("md_device_uuid", deviceToken);
+        }
+
+        if (window.socket) {
+            sessionStorage.setItem("driverId", driverId);
+            window.socket.emit("driver_login", { driverId: driverId, pin: pin, deviceId: deviceToken });
+            console.log("🚀 Dispatched driver_login for:", driverId);
+        } else {
+            alert("Error: Socket library could not load from /socket.io/socket.io.js. Please check server status.");
+        }
+    }
+
+    window.socket = io();
+    var socket = window.socket;
+    // GLOBAL TIMERS & LIFECYCLE STATE (Single Declaration)
+    window.waitTimerInterval = null;
+    window.freeGraceTimer = null;
+    window.freeGraceSeconds = 300;
+    window.isGraceArmedByDriver = false;
+    window.waitChargeTimer = null;
+    window.waitChargeSeconds = 0;
+    window.isChargingActive = false;
+    window.enRouteTimer = null;
+    window.enRouteSeconds = 0;
+    window.isEnRouteStopped = false;
+    window.WAIT_RATE = 0.35;
+    window.activeBaseFare = 0.00;
+    window.extraChargesTotal = 0.00;
+
+    function updateTotalFareDisplay() {
+        const trip = window.activeTrip || window.currentTrip;
+        const base = parseFloat(window.activeBaseFare || (trip ? trip.fare : 0) || 0);
+        const extra = parseFloat(window.extraChargesTotal || 0);
+        const finalTotal = (base + extra).toFixed(2);
+        
+        const fareEl = document.getElementById('tripFare');
+        if (fareEl) {
+            fareEl.textContent = finalTotal;
+        }
+        return finalTotal;
+    }
+
+
+    function clearAllTimers() {
+        if (window.freeGraceTimer) { clearInterval(window.freeGraceTimer); window.freeGraceTimer = null; }
+        if (window.waitChargeTimer) { clearInterval(window.waitChargeTimer); window.waitChargeTimer = null; }
+        if (window.enRouteTimer) { clearInterval(window.enRouteTimer); window.enRouteTimer = null; }
+        if (window.waitTimerInterval) { clearInterval(window.waitTimerInterval); window.waitTimerInterval = null; }
+        window.isChargingActive = false;
+        window.isEnRouteStopped = false;
+    }
+
+        
+        let myDriver = null;
+        let activeTrip = null;
+        window.followUpJob = null;
+        let currentOffer = null;
+        let offerInterval = null;
+        let offerChimeInterval = null;
+        /* removed dup waitTimerInterval */
+        let waitCountdownSeconds = 120; // Will be set from master tariff
+        let extraChargesTotal = 0;
+        let map = null;
+        let audioCtx = null;
+
+        // Master Tariff Settings loaded from server
+        let masterTariff = {
+            freeWaitMins: 2,
+            waitingRatePerMin: 0.35,
+            viaStopFee: 5.00,
+            companyCommissionPct: 20.0
+        };
+
+        // LIVE SYNC: Pull waiting time & tariff settings from server
+        async function syncDriverMasterTariff() {
+            try {
+                const res = await fetch('/api/tariff');
+                const data = await res.json();
+                if (data && data.success && data.tariff) {
+                    const t = data.tariff;
+                    masterTariff.freeWaitMins = parseInt(t.freeWaitMins || t.waitingGraceMins || 3);
+                    masterTariff.waitingRatePerMin = parseFloat(t.waitingRatePerMin || 0.45);
+                    masterTariff.viaStopFee = parseFloat(t.viaStopFee || 5.00);
+                    masterTariff.companyCommissionPct = parseFloat(t.companyCommissionPct || 20.0);
+                    console.log("⚡ Driver terminal master tariff synced:", masterTariff);
+                }
+            } catch(e) {}
+        }
+        syncDriverMasterTariff();
+
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function speakAlert(text) {
+            try {
+                if ('speechSynthesis' in window) {
+                    const u = new SpeechSynthesisUtterance(text);
+                    u.rate = 1.05;
+                    window.speechSynthesis.speak(u);
+                }
+            } catch(e) {}
+        }
+
+        function playOfferChime() {
+            try {
+        // Audio initialized on first user interaction
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(880.00, audioCtx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.45);
+            } catch(e) {}
+        }
+
+        function switchTab(tab) {
+            ['Shift', 'Bidding', 'Earnings'].forEach(t => {
+                const el = document.getElementById('view' + t);
+                const btn = document.getElementById('tab' + t);
+                if (el) el.style.display = (t === tab) ? 'block' : 'none';
+                if (btn) btn.classList.toggle('active', t === tab);
+            });
+            if (tab === 'Earnings') requestWalletUpdate();
+        }
+
+        window.attemptLogin = function attemptLogin() {
+            try {
+                if (typeof initAudio === "function") initAudio();
+            } catch (err) {
+                console.warn("Audio deferred:", err);
+            }
+            const idInput = document.getElementById("loginDriverId");
+            const pinInput = document.getElementById("loginPin");
+            const driverId = (idInput && idInput.value ? idInput.value : "MUKUND").trim().toUpperCase();
+            const pin = (pinInput && pinInput.value ? pinInput.value : "1234").trim();
+
+            console.log("🔑 Submitting driver login:", driverId);
+            sessionStorage.setItem("driverId", driverId);
+            socket.emit("driver_login", { driverId, pin });
+        }
+
+                        
+        function renderFollowUpCard(job) {
+            const card = document.getElementById("followUpTripCard");
+            if (!card) return;
+            if (!job) {
+                card.style.display = "none";
+                return;
+            }
+            document.getElementById("fuId").textContent = "#" + job.id + " • " + (job.passengerName || "Passenger");
+            document.getElementById("fuFare").textContent = "£" + Number(job.fare || 0).toFixed(2);
+            document.getElementById("fuPickup").textContent = job.pickup || "";
+            document.getElementById("fuDropoff").textContent = job.dropoff || "";
+            card.style.display = "block";
+        }
+
+        function resetDriverToStandby() {
+            setTimeout(updateHeaderBadge, 50);
+            if (typeof clearAllTimers === "function") clearAllTimers();
+
+            // CHECK IF THERE IS A QUEUED FOLLOW-UP JOB READY TO ACTIVATE
+            if (window.followUpJob) {
+                const nextTrip = window.followUpJob;
+                window.followUpJob = null;
+                renderFollowUpCard(null);
+                console.log("🚀 Promoting follow-up job #" + nextTrip.id + " to ACTIVE TRIP!");
+                if (typeof speakAlert === "function") {
+                    speakAlert("Next job activated. Heading to pickup: " + (nextTrip.pickup || ""));
+                }
+                renderActiveTrip(nextTrip);
+                return;
+            }
+
+            renderFollowUpCard(null);
+            activeTrip = null;
+            currentOffer = null;
+            window.activeJob = null;
+            const tripCard = document.getElementById("activeTripCard") || document.getElementById("activeJobSection");
+            if (tripCard) tripCard.style.display = "none";
+            const noTrip = document.getElementById("noTripSection");
+            if (noTrip) noTrip.style.display = "block";
+            const rankEl = document.getElementById("hdrQueueRank");
+            if (rankEl) {
+                rankEl.textContent = "🚕 Stand: Available";
+                rankEl.style.color = "#fff";
+            }
+            const rankBadge = document.getElementById("rankBadge") || document.getElementById("currentRankDisplay");
+            if (rankBadge) {
+                rankBadge.textContent = "STANDBY";
+                rankBadge.style.color = "#22c55e";
+            }
+            if (typeof updateWaypointUI === "function") updateWaypointUI();
+        }
+
+        
+        socket.on("job_force_completed_by_admin", (data) => {
+            alert("Booking #" + (data.jobId || "") + " was marked COMPLETED by Dispatch.");
+            resetDriverToStandby();
+            if (typeof requestWalletUpdate === "function") requestWalletUpdate();
+        });
+
+        socket.on('job_recalled_to_base', (data) => {
+            alert('Job #' + (data.jobId || '') + ' has been recalled to base by dispatch.');
+            resetDriverToStandby();
+        });
+
+        
+        
+        function updateHeaderBadge() {
+            const hdrRank = document.getElementById("hdrQueueRank");
+            if (!hdrRank) return;
+            const hasTrip = (window.activeJob && window.activeJob.status && !['COMPLETED', 'CANCELLED'].includes(window.activeJob.status.toUpperCase())) ||
+                            (window.activeTrip && window.activeTrip.status && !['COMPLETED', 'CANCELLED'].includes(window.activeTrip.status.toUpperCase())) ||
+                            (typeof activeTrip !== "undefined" && activeTrip && activeTrip.status && !['COMPLETED', 'CANCELLED'].includes(activeTrip.status.toUpperCase()));
+            
+            if (hasTrip) {
+                hdrRank.textContent = "🚖 ON JOB";
+                hdrRank.style.background = "#0284c7";
+                hdrRank.style.color = "#ffffff";
+            } else {
+                const pName = window.myCurrentPlot || "Larkhall";
+                const pRank = window.myCurrentRank || "Position #1 of 1";
+                hdrRank.textContent = "🚕 Stand: " + pName + " • " + pRank;
+                hdrRank.style.background = "";
+                hdrRank.style.color = "";
+            }
+        }
+
+        socket.on("queue_update", function(data) {
+            if (data) {
+                const total = data.totalInPlot || 1;
+                const rank = (data.plotRank !== undefined && data.plotRank !== null) ? data.plotRank : 0;
+                const rankTxt = rank > 0 ? ("Position #" + rank + " of " + total) : "In Plot (Standby)";
+                window.myCurrentRank = rankTxt;
+                if (data.plotName) window.myCurrentPlot = data.plotName;
+
+                const pRankEl = document.getElementById("curPlotRankTxt");
+                const pNameEl = document.getElementById("curPlotNameTxt");
+                if (pRankEl) pRankEl.textContent = rankTxt;
+                if (pNameEl && data.plotName) pNameEl.textContent = data.plotName;
+                updateHeaderBadge();
+                
+                if (typeof renderStandsList === "function") renderStandsList();
+            }
+        });
+
+        socket.on("all_plot_densities", function(densities) {
+            if (Array.isArray(densities)) {
+                window.allStandsData = densities;
+                const btnBadge = document.getElementById("btnStandsBadge");
+                if (btnBadge) btnBadge.textContent = densities.length;
+                if (typeof renderStandsList === "function") renderStandsList();
+            }
+        });
+
+        socket.on('login_result', (res) => {
+            if (!res.success) {
+                alert(res.message || "Login failed");
+                sessionStorage.clear();
+                localStorage.removeItem("driverId");
+                document.getElementById("loginScreen").style.display = "block";
+                document.getElementById("appContainer").style.display = "none";
+                return;
+            }
+            myDriver = res.driver;
+            window.myDriver = res.driver;
+            window.myDriverId = res.driver ? (res.driver.driverId || res.driver.id) : null;
+            if (window.myDriverId) {
+                sessionStorage.setItem("driverId", window.myDriverId);
+                localStorage.setItem("driverId", window.myDriverId);
+            }
+            // Clear and re-render bid board freshly for this logged-in driver session
+            activeBids = [];
+            renderBidBoard();
+            // Update Stand and Queue Rank from server
+            if (myDriver) {
+                const pNameEl = document.getElementById("curPlotNameTxt");
+                const pRankEl = document.getElementById("curPlotRankTxt");
+                if (pNameEl) pNameEl.textContent = myDriver.currentPlotName || "-";
+                if (pRankEl) pRankEl.textContent = "Position #" + (myDriver.plotRank || 1);
+                const hdrRank = document.getElementById("hdrQueueRank");
+                if (hdrRank) hdrRank.textContent = "🚕 Stand: " + (myDriver.currentPlotName || "Unassigned") + " • #" + (myDriver.plotRank || 1);
+            }
+
+            // Load Master Tariff values
+            if (res.tariff) {
+                masterTariff.freeWaitMins = parseInt(res.tariff.freeWaitMins) || 2;
+                masterTariff.waitingRatePerMin = parseFloat(res.tariff.waitingRatePerMin) || 0.35;
+                masterTariff.viaStopFee = parseFloat(res.tariff.viaStopFee) || 5.00;
+                masterTariff.companyCommissionPct = parseFloat(res.tariff.companyCommissionPct) || 20.0;
+            }
+
+            // Update UI Labels with Master Tariff values
+            const elWait = document.getElementById('lblWaitRate'); if (elWait) elWait.textContent = '£' + masterTariff.waitingRatePerMin.toFixed(2);
+            const elStop = document.getElementById('lblStopFee'); if (elStop) elStop.textContent = '£' + masterTariff.viaStopFee.toFixed(2);
+            const elPobStop = document.getElementById('lblPobStopFee'); if (elPobStop) elPobStop.textContent = '£' + masterTariff.viaStopFee.toFixed(2);
+            document.getElementById('earnCommPct').textContent = masterTariff.companyCommissionPct;
+
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('appContainer').style.display = 'block';
+
+            document.getElementById('hdrDriverId').textContent = myDriver.driverId;
+            document.getElementById('hdrVehClass').textContent = (myDriver.vehicle || '') + ' (' + (myDriver.vehicleClass || 'Standard') + ')';
+
+            setTimeout(() => {
+                if (!map) {
+                    map = L.map('driverMap').setView([51.3776, -2.3571], 14);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+                }
+            }, 300);
+
+            startLocationWatcher();
+
+            if (res.activeTrip) {
+                renderActiveTrip(res.activeTrip);
+            }
+            requestWalletUpdate();
+        });
+
+        function startLocationWatcher() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.watchPosition(
+                    pos => {
+                        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                        socket.emit('driver_location_update', coords);
+                    },
+                    err => {
+                        setInterval(() => {
+                            socket.emit('driver_location_update', { lat: 51.3951, lng: -2.3436 });
+                        }, 10000);
+                    },
+                    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+                );
+            }
+        }
+
+        socket.on('driver_stand_hud', (data) => {
+            if (activeTrip) {
+                const rankEl = document.getElementById('hdrQueueRank');
+                if (rankEl) {
+                    rankEl.textContent = '🚖 ON JOB (Busy)';
+                    rankEl.style.color = '#38bdf8';
+                }
+                return;
+            }
+            const rankEl = document.getElementById('hdrQueueRank');
+            const pName = data.plotName || 'Larkhall';
+            const pRank = data.plotRank || 1;
+            if (rankEl) {
+                rankEl.textContent = '🚕 Rank #' + pRank + ' (' + pName.replace(' Stand', '') + ')';
+                rankEl.style.color = '#fff';
+            }
+        });
+
+        
+        socket.on("job_offer_withdrawn", (data) => {
+            const modal = document.getElementById("offerModal");
+            if (modal) modal.style.display = "none";
+            if (typeof stopOfferChime === "function") stopOfferChime();
+        });
+
+        socket.on("offer_failed", (data) => {
+            const modal = document.getElementById("offerModal");
+            if (modal) modal.style.display = "none";
+            if (typeof stopOfferChime === "function") stopOfferChime();
+            alert("⚠️ " + (data.message || "Offer expired. Cascaded to next driver."));
+        });
+
+        socket.on('job_offer', (job) => {
+            currentOffer = job;
+            speakAlert('New job offer received. Fare £' + (job.fare || ''));
+            document.getElementById('offFare').textContent = Number(job.fare || 0).toFixed(2);
+            document.getElementById('offPassenger').textContent = (job.passenger || 'Passenger') + ' (' + (job.phone || '') + ')';
+            document.getElementById('offPickup').textContent = job.pickup || '-';
+            document.getElementById('offDropoff').textContent = job.dropoff || '-';
+            document.getElementById('offPaxVeh').textContent = (job.passengers || 1) + ' Pax • ' + (job.vehicleClass || 'Standard');
+
+            document.getElementById('offerModal').style.display = 'flex';
+            playOfferChime();
+            clearInterval(offerChimeInterval);
+            offerChimeInterval = setInterval(playOfferChime, 2500);
+
+            const bar = document.getElementById('offBar');
+            bar.style.width = '100%';
+            let timeLeft = 20;
+            clearInterval(offerInterval);
+            offerInterval = setInterval(() => {
+                timeLeft--;
+                bar.style.width = ((timeLeft / 20) * 100) + '%';
+                if (timeLeft <= 0) {
+                    clearInterval(offerInterval);
+                    respondToOffer('TIMEOUT');
+                }
+            }, 1000);
+        });
+
+        function respondToOffer(response) {
+            clearInterval(offerInterval);
+            clearInterval(offerChimeInterval);
+            document.getElementById('offerModal').style.display = 'none';
+
+            if (!currentOffer) return;
+            const chosen = currentOffer;
+            const resp = String(response).toUpperCase();
+
+            if (resp === 'ACCEPTED' || resp === 'ACCEPT') {
+                renderActiveTrip(chosen);
+                socket.emit('driver_job_response', { jobId: chosen.id, bookingId: chosen.id, response: 'ACCEPTED' });
+                speakAlert("Job accepted. Route to pickup.");
+            } else {
+                socket.emit('driver_job_response', { jobId: chosen.id, bookingId: chosen.id, response: 'REJECT' });
+                currentOffer = null;
+            }
+        }
+
+        // ================= BID BOARD (FASTEST FINGER) =================
+        let activeBids = [];
+
+        function renderBidBoard() {
+            const container = document.getElementById("biddingListContainer");
+            if (!container) return;
+            if (!activeBids.length) {
+                container.innerHTML = '<div style="color:#94a3b8; font-size:0.85rem; padding:8px 0;">No open jobs broadcast.</div>';
+                return;
+            }
+
+            container.innerHTML = activeBids.map(b => `
+                <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="color:#38bdf8; font-weight:bold; font-size:0.9rem;">#${b.id} • £${Number(b.fare || 0).toFixed(2)}</div>
+                        <div style="font-size:0.8rem; color:#cbd5e1; margin-top:2px;">📍 ${b.pickup || "-"} ➔ ${b.dropoff || "-"}</div>
+                        <div style="font-size:0.75rem; color:#94a3b8;">${b.passengers || 1} Pax • ${b.vehicleClass || "Standard"}</div>
+                    </div>
+                    <button onclick="claimBidJob('${b.id}')" style="background:#22c55e; hover:background:#16a34a; color:#fff; border:none; border-radius:6px; padding:8px 12px; font-weight:bold; cursor:pointer; font-size:0.85rem; box-shadow:0 2px 4px rgba(0,0,0,0.2);">
+                        ⚡ Claim
+                    </button>
+                </div>
+            `).join("");
+        }
+
+        window.claimBidJob = function(jobId) {
+            socket.emit("driver_claim_bid_job", { jobId: jobId });
+        };
+
+        socket.on("open_job_for_bidding", (job) => {
+            // Dismiss modal if this was the timed-out offer
+            if (currentOffer && currentOffer.id === job.id) {
+                document.getElementById("offerModal").style.display = "none";
+                clearInterval(offerInterval);
+                clearInterval(offerChimeInterval);
+                currentOffer = null;
+            }
+            const exists = activeBids.find(x => x.id === job.id);
+            if (!exists) {
+                activeBids.unshift(job);
+                playOfferChime();
+                if (typeof speakAlert === "function") {
+                    speakAlert("Open bid board job available. Fare £" + (job.fare || ""));
+                }
+            }
+            renderBidBoard();
+        });
+
+        socket.on("bid_job_claimed", (data) => {
+            activeBids = activeBids.filter(x => x.id !== data.jobId);
+            renderBidBoard();
+        });
+
+        socket.on('active_trip_assigned', (job) => {
+            console.log("🚀 active_trip_assigned received:", job);
+            activeBids = activeBids.filter(x => x.id !== job.id);
+            renderBidBoard();
+
+            // 1. Dismiss any offer/bid modal still open
+            const offerModal = document.getElementById("offerModal");
+            if (offerModal) offerModal.style.display = "none";
+            if (typeof offerInterval !== "undefined") clearInterval(offerInterval);
+            if (typeof offerChimeInterval !== "undefined") clearInterval(offerChimeInterval);
+
+            // 2. CHECK IF DRIVER ALREADY HAS A JOB IN PROGRESS
+            const isCurrentlyOnJob = activeTrip && ['Accepted', 'ACCEPTED', 'Arrived', 'ARRIVED', 'POB'].includes(activeTrip.status);
+
+            if (isCurrentlyOnJob && activeTrip.id !== job.id) {
+                // QUEUE AS FOLLOW-UP JOB
+                window.followUpJob = job;
+                console.log("📦 Stashed job #" + job.id + " as FOLLOW-UP run.");
+                renderFollowUpCard(job);
+                if (typeof speakAlert === "function") {
+                    speakAlert("Follow-up job queued for after current trip.");
+                }
+                if (typeof switchTab === "function") {
+                    switchTab('Shift');
+                }
+                return;
+            }
+
+            // PRIMARY ACTIVE JOB
+            window.activeJob = job;
+        window.activeTrip = job;
+        activeTrip = job;
+        window.currentTrip = job;
+            if (typeof switchTab === "function") {
+                switchTab('Shift');
+            }
+            if (typeof renderActiveTrip === "function") {
+                renderActiveTrip(job);
+            }
+
+            const tripContainer = document.getElementById("activeTripContainer") || document.getElementById("activeTripSection");
+            if (tripContainer) {
+                tripContainer.style.display = "block";
+            }
+            const standbySection = document.getElementById("standbySection") || document.getElementById("availableSection");
+            if (standbySection) {
+                standbySection.style.display = "none";
+            }
+
+            // 4. Scroll smoothly to top of active trip
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        socket.on('active_trip_cleared', () => {
+            window.activeJob = null;
+            const tripSection = document.getElementById("activeTripContainer") || document.getElementById("activeTripSection");
+            if (tripSection) tripSection.style.display = "none";
+            const standbySection = document.getElementById("standbySection") || document.getElementById("availableSection");
+            if (standbySection) standbySection.style.display = "block";
+            const badge = document.getElementById("driverStatusBadge");
+            if (badge) { badge.textContent = "Stand: Available"; badge.style.color = "#4ade80"; }
+            if (typeof speakAlert === "function") speakAlert("Job recalled to base. You are back on stand.");
+        });
+
+        function renderActiveTrip(job) {
+
+    let payBadge = document.getElementById("tripPaymentBadge");
+    if (payBadge) {
+        // Collect all possible fields the server or job object might use
+        let rawPay = job.paymentMethod || job.paymentType || job.payment || job.payMethod || job.account || job.type || (job.isAccount ? "ACCOUNT" : "") || "";
+        let pStr = String(rawPay).toUpperCase();
+        let notesStr = String(job.customerNotes || job.notes || "").toUpperCase();
+
+        if (pStr.includes("CARD") || pStr.includes("STRIPE") || pStr.includes("ONLINE") || pStr.includes("PAID") || pStr.includes("PREPAID") || notesStr.includes("CARD")) {
+            payBadge.textContent = "CARD";
+            payBadge.style.background = "#10b981"; // Green
+            payBadge.style.color = "#fff";
+        } else if (pStr.includes("ACC") || pStr.includes("CORP") || (job.account && String(job.account).length > 0) || notesStr.includes("ACCOUNT")) {
+            payBadge.textContent = "ACCOUNT";
+            payBadge.style.background = "#0284c7"; // Blue
+            payBadge.style.color = "#fff";
+        } else {
+            payBadge.textContent = "CASH";
+            payBadge.style.background = "#f59e0b"; // Amber
+            payBadge.style.color = "#000";
+        }
+    }
+
+            setTimeout(updateHeaderBadge, 50);
+        window.activeJob = job;
+        currentWaypointIndex = (job && (job.status === "POB")) ? 1 : 0;
+        setTimeout(updateWaypointUI, 50);
+            if (!job) { resetDriverToStandby(); return; }
+            activeTrip = job;
+            window.activeBaseFare = parseFloat(job.fare || 0);
+            window.extraChargesTotal = 0.00;
+            updateTotalFareDisplay();
+            clearInterval(waitTimerInterval);
+
+            document.getElementById("noTripSection").style.display = "none";
+            const activeCard = document.getElementById("activeTripCard") || document.getElementById("activeJobSection");
+            if (activeCard) activeCard.style.display = "block";
+            const rankBadge = document.getElementById("rankBadge") || document.getElementById("currentRankDisplay");
+            if (rankBadge) { rankBadge.textContent = "🚖 ON JOB"; rankBadge.style.color = "#38bdf8"; }
+            document.getElementById('activeTripCard').style.display = 'block';
+
+            const pName = job.passenger || 'Passenger';
+            const pPhone = job.phone || '';
+            const pFare = Number(job.fare || 0).toFixed(2);
+            const pPickup = job.pickup || '-';
+            const pDropoff = job.dropoff || '-';
+            const pVias = job.vias || '';
+            const pNotes = job.customerNotes || '';
+
+            document.getElementById('tripPassenger').textContent = pName;
+
+            // Ensure Quick Comms Bar exists on active trip card
+            let qBar = document.getElementById("driverQuickCommsBar");
+            if (!qBar) {
+                const card = document.getElementById("activeTripCard");
+                if (card) {
+                    qBar = document.createElement("div");
+                    qBar.id = "driverQuickCommsBar";
+                    qBar.style.cssText = "background:#0f172a; border:1px solid #334155; border-radius:8px; padding:8px; margin:10px 0; display:flex; flex-wrap:wrap; gap:6px;";
+                    qBar.innerHTML = `
+                        <button type="button" onclick="sendQuickDriverMsg('Heavy Traffic (+10 mins)')" style="flex:1 1 45%; background:#1e293b; color:#cbd5e1; border:1px solid #334155; border-radius:6px; padding:8px 4px; font-size:0.75rem; font-weight:bold; cursor:pointer;">🚦 Traffic (+10m)</button>
+                        <button type="button" onclick="sendQuickDriverMsg('Waiting outside passenger address')" style="flex:1 1 45%; background:#1e293b; color:#cbd5e1; border:1px solid #334155; border-radius:6px; padding:8px 4px; font-size:0.75rem; font-weight:bold; cursor:pointer;">⏳ Waiting Outside</button>
+                        <button type="button" onclick="dialPassengerDirect()" style="flex:1 1 45%; background:#1e293b; color:#4ade80; border:1px solid #22c55e; border-radius:6px; padding:8px 4px; font-size:0.75rem; font-weight:bold; cursor:pointer;">📞 Call Passenger</button>
+                        <button type="button" onclick="sendQuickDriverMsg('Driver query to base')" style="flex:1 1 45%; background:#1e293b; color:#38bdf8; border:1px solid #0284c7; border-radius:6px; padding:8px 4px; font-size:0.75rem; font-weight:bold; cursor:pointer;">💬 Msg Base</button>
+                    `;
+                    card.insertBefore(qBar, card.firstChild);
+                }
+            }
+
+            document.getElementById('tripFare').textContent = pFare;
+            document.getElementById('tripPickup').textContent = pPickup;
+            document.getElementById('tripDropoff').textContent = pDropoff;
+            document.getElementById('tripPaxVeh').textContent = (job.passengers || 1) + ' Pax • ' + (job.vehicleClass || 'Standard');
+
+            const phoneEl = document.getElementById('tripPhone');
+            const phoneBtn = document.getElementById('tripPhoneBtn');
+            if (pPhone) {
+                phoneEl.textContent = pPhone;
+                phoneBtn.href = 'tel:' + pPhone;
+                phoneBtn.style.display = 'inline-flex';
+            } else {
+                phoneBtn.style.display = 'none';
+            }
+
+            const boxVia = document.getElementById('boxViaStops');
+            if (pVias && pVias !== '[]' && pVias !== 'null') {
+                boxVia.style.display = 'block';
+                document.getElementById('tripVia').textContent = typeof pVias === 'string' && pVias.startsWith('[') ? JSON.parse(pVias).join(' ➔ ') : pVias;
+            } else {
+                boxVia.style.display = 'none';
+            }
+
+            const boxNotes = document.getElementById('tripNotesBox');
+            if (pNotes) {
+                boxNotes.style.display = 'block';
+                document.getElementById('tripNotes').textContent = pNotes;
+            } else {
+                boxNotes.style.display = 'none';
+            }
+
+            const rankEl = document.getElementById('hdrQueueRank');
+            if (rankEl) {
+                rankEl.textContent = '🚖 ON JOB (Busy)';
+                rankEl.style.color = '#38bdf8';
+            }
+
+            const initialStatus = String(job.status || 'ACCEPTED').toUpperCase();
+            updateSequentialUI(initialStatus);
+        }
+
+        
+        function renderLifecycleForPOB() {
+            const container = document.getElementById("lifecycleActionBtnContainer");
+            const navBtn = document.getElementById("btnNavMaps");
+            if (!container) return;
+
+            const job = window.activeTrip || window.activeJob || (typeof currentTripJob !== "undefined" ? currentTripJob : null);
+            const waypoints = (typeof getJobWaypoints === "function") ? getJobWaypoints(job) : [];
+
+            // Waypoints array layout: [0: PICKUP, 1..N-1: VIA stops, N: DROPOFF]
+            // If there are NO vias, length is <= 2
+            const hasVias = waypoints.length > 2;
+
+            if (!hasVias || currentWaypointIndex >= waypoints.length - 1) {
+                // At final stretch to destination
+                if (navBtn) navBtn.textContent = "🗺️ Open Navigation to Destination";
+                container.innerHTML = '<button type="button" id="btnMainLifecycle" class="btn btn-red" style="width:100%; padding:14px; font-size:1.1rem; font-weight:800; cursor:pointer; margin-top:8px;" onclick="transitionTrip(\'Completed\')">🏁 Complete &amp; Clear Run</button>';
+            } else {
+                // There are pending via stops
+                const currentStop = waypoints[currentWaypointIndex];
+                const nextStopName = currentStop ? currentStop.label : ("Via #" + currentWaypointIndex);
+                if (navBtn) navBtn.textContent = "🗺️ Navigate to " + (currentStop ? currentStop.label : "Via Stop");
+
+                container.innerHTML = '<button type="button" id="btnMainLifecycle" class="btn btn-blue" style="width:100%; padding:14px; font-size:1.1rem; font-weight:800; cursor:pointer; margin-top:8px;" onclick="onArrivedAtWaypoint()">📍 Arrived at ' + nextStopName + '</button>';
+            }
+
+            if (typeof updateWaypointUI === "function") updateWaypointUI();
+        }
+
+        function onArrivedAtWaypoint() {
+            const job = window.activeTrip || window.activeJob;
+            const waypoints = (typeof getJobWaypoints === "function") ? getJobWaypoints(job) : [];
+
+            if (currentWaypointIndex < waypoints.length - 1) {
+                currentWaypointIndex++;
+                if (typeof speakAlert === "function") speakAlert("Arrived at stop. Proceeding to next destination.");
+                renderLifecycleForPOB();
+            }
+        }
+
+        function updateSequentialUI(status) {
+            const container = document.getElementById('lifecycleActionBtnContainer');
+            const badge = document.getElementById('tripStatusBadge');
+            const waitCard = document.getElementById('unifiedWaitingCard');
+            const navBtn = document.getElementById('btnNavMaps');
+
+            const st = String(status || 'ACCEPTED').toUpperCase();
+            if (badge) badge.textContent = st;
+
+            if (st === 'ACCEPTED' || st === 'OFFERED' || st === 'PENDING') {
+                clearAllTimers();
+                isGraceArmedByDriver = false;
+                waitChargeSeconds = 0;
+                enRouteSeconds = 0;
+
+                if (badge) badge.style.background = '#0284c7';
+                if (waitCard) waitCard.style.display = 'none';
+                if (navBtn) navBtn.textContent = '🗺️ Open Navigation to Pickup';
+                
+                if (container) {
+                    container.innerHTML = '<button type="button" id="btnMainLifecycle" class="btn btn-blue" style="width:100%; padding:14px; font-size:1.1rem; font-weight:800; cursor:pointer;" onclick="transitionTrip(\'Arrived\')">📍 Mark Arrived at Pickup</button>';
+                }
+            } 
+            else if (st === 'ARRIVED') {
+                clearAllTimers();
+                if (badge) badge.style.background = '#f59e0b';
+                if (navBtn) navBtn.textContent = '🗺️ Open Navigation to Pickup';
+                
+                // RENDER POB BUTTON FIRST SO IT NEVER FREEZES
+                if (container) {
+                    container.innerHTML = '<button type="button" id="btnMainLifecycle" class="btn btn-green" style="width:100%; padding:14px; font-size:1.1rem; font-weight:800; cursor:pointer; margin-top:8px;" onclick="transitionTrip(\'POB\')">👥 Passenger On Board (POB)</button>';
+                }
+
+                // THEN SHOW & START WAITING CARD
+                if (waitCard) {
+                    waitCard.style.display = 'block';
+                }
+                
+                try {
+                    startArrivalGraceCountdown();
+                } catch (e) {
+                    console.error("Error starting arrival grace:", e);
+                }
+            } 
+            else if (st === "POB") {
+                clearAllTimers();
+                if (badge) {
+                    badge.style.background = "#10b981";
+                    badge.textContent = "POB (En Route)";
+                }
+                
+                // Initialize waypoint index to 1 (first via or destination)
+                if (currentWaypointIndex === 0) currentWaypointIndex = 1;
+                renderLifecycleForPOB();
+
+                if (waitCard) {
+                    waitCard.style.display = 'block';
+                }
+
+                try {
+                    renderEnRouteStopControls();
+                } catch (e) {
+                    console.error("Error setting en route controls:", e);
+                }
+            } 
+            else {
+                clearAllTimers();
+                if (waitCard) waitCard.style.display = 'none';
+                if (container) container.innerHTML = '';
+            }
+        }
+
+        
+    function driverReturnJobToBase() {
+        if (!activeTrip && !window.currentTrip) return;
+        const trip = activeTrip || window.currentTrip;
+        const reason = prompt('Please enter reason for returning job to base (e.g. Passenger No-Show, Breakdown, Traffic):', 'Passenger No-Show');
+        if (!reason) return;
+
+        if (confirm('Are you sure you want to return this booking back to base? It will be unassigned and returned to the dispatch queue.')) {
+            clearAllTimers();
+            socket.emit('driver_reject_active_job', {
+                jobId: trip.id || trip.bookingId,
+                driverId: (myDriver && myDriver.driverId) ? myDriver.driverId : 'MUKUND',
+                reason: reason
+            });
+            activeTrip = null;
+            window.currentTrip = null;
+            const tripCard = document.getElementById("activeTripCard") || document.getElementById("activeJobSection");
+                if (tripCard) tripCard.style.display = "none";
+            document.getElementById('noTripSection').style.display = 'block';
+            speakAlert("Job returned to base dispatch.");
+        }
+    }
+
+
+        function transitionTrip(nextStatus) {
+            const current = window.activeTrip || window.activeJob || (typeof currentTripJob !== "undefined" ? currentTripJob : null);
+            if (!current) {
+                console.error("No active trip found to transition:", nextStatus);
+                return;
+            }
+            window.activeTrip = current;
+            const activeObj = window.activeJob || activeTrip || window.activeTrip;
+            const tripId = (activeObj && (activeObj.id || activeObj.bookingId)) ? (activeObj.id || activeObj.bookingId) : (current.id || current.bookingId);
+            const trip = window.activeTrip || window.currentTrip;
+            const liveTotalText = document.getElementById('tripFare') ? document.getElementById('tripFare').textContent : '';
+            // Sanitize: strip non-numeric characters (like £, $, spaces)
+            const cleanLiveFare = parseFloat(String(liveTotalText).replace(/[^0-9.]/g, ''));
+            const base = parseFloat(window.activeBaseFare || (trip ? trip.fare : 0) || 0);
+            const extra = parseFloat(window.extraChargesTotal || 0);
+            const totalFare = (!isNaN(cleanLiveFare) && cleanLiveFare > 0) ? cleanLiveFare : ((base + extra) > 0 ? (base + extra) : 0.00);
+            const dId = (window.myDriver && window.myDriver.driverId) ? window.myDriver.driverId : (sessionStorage.getItem("driverId") || "MUKUND");
+            const dName = (myDriver && myDriver.name) ? myDriver.name : 'Mukund Desai';
+
+            if (nextStatus === 'Completed') {
+                if (!confirm('Confirm completing run and collecting £' + totalFare.toFixed(2) + '?')) {
+                    return;
+                }
+            }
+
+            requestWalletUpdate();
+            socket.emit('update_trip_status', {
+                jobId: tripId,
+                status: nextStatus.toUpperCase(),
+                fare: totalFare,
+                driverId: dId,
+                driverName: dName
+            });
+
+            activeTrip.status = nextStatus.toUpperCase();
+
+            if (nextStatus.toLowerCase() === 'arrived') {
+                speakAlert("Arrival marked. Free waiting grace window active.");
+                updateSequentialUI('ARRIVED');
+            } else if (nextStatus.toLowerCase() === 'pob') {
+                speakAlert("Passenger on board. Safe journey.");
+                updateSequentialUI('POB');
+            } else if (nextStatus === 'Completed' || nextStatus.toUpperCase() === 'COMPLETED') {
+                clearAllTimers();
+                setTimeout(() => { requestWalletUpdate(); }, 600);
+                
+                // Trigger resetDriverToStandby which automatically checks and promotes window.followUpJob!
+                resetDriverToStandby();
+                return;
+                window.activeBaseFare = 0;
+                window.extraChargesTotal = 0;
+                document.getElementById('activeTripCard').style.display = 'none';
+                document.getElementById('noTripSection').style.display = 'block';
+
+                const rankEl = document.getElementById('hdrQueueRank');
+                if (rankEl) {
+                    rankEl.textContent = '🚕 Stand: Available';
+                    rankEl.style.color = '#fff';
+                }
+                speakAlert("Job completed. Fare logged.");
+                requestWalletUpdate();
+            }
+        }
+
+        // DRIVER WALLET & EARNINGS ENGINE
+        function requestDriverWalletRefresh() { requestWalletUpdate(); }
+        function requestWalletUpdate() {
+            const dId = (myDriver && myDriver.driverId) ? myDriver.driverId : 'MUKUND';
+            socket.emit('get_driver_wallet', { driverId: dId });
+        }
+
+        socket.on('driver_wallet_data', (w) => {
+            if (!w || !w.success) return;
+            document.getElementById('earnGross').textContent = '£' + (w.gross || '0.00');
+            document.getElementById('earnJobsCount').textContent = w.totalJobs || 0;
+            document.getElementById('earnCash').textContent = '£' + (w.cashTotal || '0.00');
+            document.getElementById('earnCard').textContent = '£' + (w.cardTotal || '0.00');
+            document.getElementById('earnCommCut').textContent = '-£' + (w.commission || '0.00');
+            document.getElementById('earnCommPct').textContent = w.commPct || 20;
+            document.getElementById('earnNetSettlement').textContent = '£' + (w.netPay || '0.00');
+            
+            const balEl = document.getElementById('earnSettlementBalance');
+            const balLabel = document.getElementById('earnSettlementLabel');
+            if (balEl && balLabel) {
+                if (w.settlementType === 'OFFICE_OWES_DRIVER') {
+                    balLabel.textContent = 'Office Owes Driver';
+                    balLabel.style.color = '#34d399';
+                    balEl.textContent = '+£' + (w.settlement || '0.00');
+                    balEl.style.color = '#34d399';
+                } else {
+                    balLabel.textContent = 'Driver Owes Office';
+                    balLabel.style.color = '#f87171';
+                    balEl.textContent = '-£' + (w.settlement || '0.00');
+                    balEl.style.color = '#f87171';
+                }
+            }
+
+            const listEl = document.getElementById('walletRunsList');
+            if (w.jobs && w.jobs.length > 0) {
+                const renderJobs = w.jobs.slice();
+                // Newest completed run pinned to top
+                const sortedJobs = w.jobs.slice();
+                listEl.innerHTML = sortedJobs.map(function(j) {
+                    var timeStr = j.createdAt ? (j.createdAt.indexOf("T") !== -1 ? j.createdAt.split("T")[1].slice(0, 5) : j.createdAt) : "";
+                    var fareVal = Number(j.fare || 0).toFixed(2);
+                    var p = j.pickup || "Pickup";
+                    var d = j.dropoff || "Dropoff";
+                    var pay = j.paymentMethod || "Cash";
+                    return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 4px; border-bottom:1px solid #1e293b; gap:8px;">
+    <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; color:#f8fafc; font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p} ➔ ${d}</div>
+        <div style="color:#64748b; font-size:0.75rem; margin-top:2px;">${timeStr ? timeStr + " • " : ""}${pay}</div>
+    </div>
+    <div style="text-align:right; flex-shrink:0;">
+        <strong style="color:#10b981; font-size:0.95rem;">£${fareVal}</strong>
+    </div>
+</div>`;
+                }).join("");
+            } else {
+                listEl.innerHTML = '<div style="color:#64748b; text-align:center; padding:12px;">No completed trips yet.</div>';
+            }
+        });
+
+        socket.on('wallet_refresh_needed', () => {
+            requestWalletUpdate();
+        });
+
+        
+    
+    let currentWaypointIndex = 0;
+
+    function getJobWaypoints(job) {
+        if (!job) return [];
+        var stops = [];
+        if (job.pickup) stops.push({ type: "PICKUP", label: "Pickup: " + job.pickup, address: job.pickup });
+
+        var rawVias = job.vias || job.via || [];
+        if (typeof rawVias === "string") {
+            try { rawVias = JSON.parse(rawVias); }
+            catch(e) { rawVias = rawVias.split(",").map(function(s) { return s.trim(); }).filter(Boolean); }
+        }
+        if (Array.isArray(rawVias)) {
+            rawVias.forEach(function(v, idx) {
+                var addr = (typeof v === "object" && v) ? (v.address || v.stop || "") : String(v);
+                if (addr) stops.push({ type: "VIA", label: "Via Stop #" + (idx + 1) + ": " + addr, address: addr, index: idx + 1 });
+            });
+        }
+
+        var drop = job.dropoff || job.destination || "";
+        if (drop) stops.push({ type: "DROPOFF", label: "Destination: " + drop, address: drop });
+        return stops;
+    }
+
+    function openGoogleNavigation() {
+        var job = window.activeJob || (typeof currentTripJob !== "undefined" ? currentTripJob : null);
+        if (!job) return;
+        var waypoints = getJobWaypoints(job);
+        if (waypoints.length === 0) return;
+        var targetStop = waypoints[currentWaypointIndex] || waypoints[waypoints.length - 1];
+        var destQuery = encodeURIComponent(targetStop.address);
+        window.open("https://www.google.com/maps/dir/?api=1&destination=" + destQuery + "&travelmode=driving", "_blank");
+    }
+
+    function advanceToNextStop() {
+        var job = window.activeJob || (typeof currentTripJob !== "undefined" ? currentTripJob : null);
+        var waypoints = getJobWaypoints(job);
+        if (currentWaypointIndex < waypoints.length - 1) {
+            currentWaypointIndex++;
+            updateWaypointUI();
+        }
+    }
+
+    function updateWaypointUI() {
+        var job = window.activeJob || (typeof currentTripJob !== "undefined" ? currentTripJob : null);
+        if (!job) return;
+        var waypoints = getJobWaypoints(job);
+        var navBtn = document.getElementById("btnNavMaps");
+        var curr = waypoints[currentWaypointIndex];
+
+        if (navBtn && curr) {
+            navBtn.textContent = "🗺️ Navigate to " + (curr.type === "PICKUP" ? "Pickup" : curr.type === "VIA" ? "Via Stop" : "Destination");
+        }
+
+        var viaHud = document.getElementById("activeViaHud");
+        if (viaHud) {
+            if (waypoints.length > 2) {
+                viaHud.style.display = "block";
+                var stepCount = "Route Waypoint (" + (currentWaypointIndex + 1) + "/" + waypoints.length + "):";
+                var stopLabel = curr ? curr.label : "";
+                var isVia = curr && curr.type === "VIA";
+                var btnHtml = isVia ? '<button type="button" class="btn btn-sm btn-green" style="margin-top:6px; width:100%; font-size:0.8rem;" onclick="advanceToNextStop()">✅ Arrived at Via (Next Stop)</button>' : "";
+                viaHud.innerHTML = '<div style="font-size:0.8rem; color:#94a3b8; margin-bottom:4px;">' + stepCount + '</div>' +
+                                   '<div style="font-weight:700; color:#38bdf8;">' + stopLabel + '</div>' + btnHtml;
+            } else {
+                viaHud.style.display = "none";
+            }
+        }
+    }
+
+    function startArrivalGraceCountdown() {
+    clearAllTimers();
+    const configuredMins = (masterTariff && masterTariff.freeWaitMins) ? parseInt(masterTariff.freeWaitMins) : 5;
+    window.freeGraceSeconds = configuredMins * 60;
+    isGraceArmedByDriver = false;
+
+    renderArrivalGraceUI();
+
+    freeGraceTimer = setInterval(() => {
+        freeGraceSeconds--;
+        renderArrivalGraceUI();
+
+        if (freeGraceSeconds <= 0) {
+            clearInterval(freeGraceTimer);
+            freeGraceTimer = null;
+            onGraceWindowFinished();
+        }
+    }, 1000);
+}
+
+function renderArrivalGraceUI() {
+    const title = document.getElementById('waitCardTitle');
+    const badge = document.getElementById('waitCardBadge');
+    const clock = document.getElementById('waitClockDisplay');
+    const btnBox = document.getElementById('waitActionBtnBox');
+
+    if (title) title.textContent = '⏱️ Free Arrival Grace Window';
+    if (badge) {
+        const freeMins = (masterTariff && masterTariff.freeWaitMins) ? masterTariff.freeWaitMins : 2; badge.textContent = isGraceArmedByDriver ? 'Armed: Starts After Grace' : `Free ${freeMins}-Min Grace`;
+        badge.style.background = isGraceArmedByDriver ? '#0284c7' : '#15803d';
+        badge.style.color = '#fff';
+    }
+
+    const mins = Math.floor(Math.max(0, freeGraceSeconds) / 60);
+    const secs = Math.max(0, freeGraceSeconds) % 60;
+    if (clock) {
+        clock.textContent = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+        clock.style.color = '#fde047';
+    }
+
+    if (btnBox) {
+        if (!isGraceArmedByDriver) {
+            btnBox.innerHTML = '<button type="button" class="btn" style="width:100%; padding:10px; font-weight:700; background:#334155; color:#38bdf8; border:1px solid #0284c7; border-radius:6px; cursor:pointer;" onclick="toggleArmWaitingEarly()">⚡ Arm Waiting Charge (Starts After Grace)</button>';
+        } else {
+            btnBox.innerHTML = '<button type="button" class="btn" style="width:100%; padding:10px; font-weight:700; background:#065f46; color:#a7f3d0; border:1px solid #10b981; border-radius:6px; cursor:pointer;" onclick="toggleArmWaitingEarly()">✅ Armed: Free window running, will charge after 00:00 (Click to Disarm)</button>';
+        }
+    }
+}
+
+function toggleArmWaitingEarly() {
+    isGraceArmedByDriver = !isGraceArmedByDriver;
+    renderArrivalGraceUI();
+}
+
+// 2. WHEN 5 MINS EXPIRE
+function onGraceWindowFinished() {
+    if (isGraceArmedByDriver) {
+        // Driver already authorized it: start charge timer now
+        startWaitingChargeEngine();
+    } else {
+        // Driver has NOT clicked yet: stay at 00:00 with £0.00 until driver chooses to start
+        const title = document.getElementById('waitCardTitle');
+        const badge = document.getElementById('waitCardBadge');
+        const clock = document.getElementById('waitClockDisplay');
+        const btnBox = document.getElementById('waitActionBtnBox');
+
+        if (title) title.textContent = '⏱️ Free Grace Expired';
+        if (badge) {
+            badge.textContent = 'Free Period Ended';
+            badge.style.background = '#dc2626';
+            badge.style.color = '#fff';
+        }
+        if (clock) {
+            clock.textContent = '00:00 (+£0.00)';
+            clock.style.color = '#ef4444';
+        }
+        if (btnBox) {
+            btnBox.innerHTML = '<button type="button" class="btn" style="width:100%; padding:12px; font-weight:800; font-size:1rem; background:#dc2626; color:#fff; border-radius:6px; cursor:pointer;" onclick="startWaitingChargeEngine()">▶️ Start Waiting Charge (£0.35/min)</button>';
+        }
+    }
+}
+
+// 3. CHARGEABLE WAITING CLOCK
+function startWaitingChargeEngine() {
+    if (waitChargeTimer) clearInterval(waitChargeTimer);
+    isChargingActive = true;
+
+    const title = document.getElementById('waitCardTitle');
+    const badge = document.getElementById('waitCardBadge');
+    const btnBox = document.getElementById('waitActionBtnBox');
+
+    if (title) title.textContent = '⏱️ Waiting Charge Running';
+    if (badge) {
+        badge.textContent = 'Charging Active';
+        badge.style.background = '#b91c1c';
+        badge.style.color = '#fff';
+    }
+
+    if (btnBox) {
+        btnBox.innerHTML = '<button type="button" class="btn" style="width:100%; padding:10px; font-weight:700; background:#475569; color:#fff; border-radius:6px; cursor:pointer;" onclick="pauseWaitingCharge()">⏸️ Pause Waiting Charge</button>';
+    }
+
+    waitChargeTimer = setInterval(() => {
+        waitChargeSeconds++;
+        const mins = Math.floor(waitChargeSeconds / 60);
+        const secs = waitChargeSeconds % 60;
+        const billedMins = Math.floor(waitChargeSeconds / 60);
+        const rate = (masterTariff && masterTariff.waitingRatePerMin) ? masterTariff.waitingRatePerMin : (window.WAIT_RATE || 0.35);
+        const fee = billedMins * rate;
+
+        // Update waiting box display
+        const clock = document.getElementById('waitClockDisplay');
+        if (clock) {
+            clock.innerHTML = '+' + String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0') + ' <span style="font-size:0.95rem; color:#f87171;">(+£' + fee.toFixed(2) + ')</span>';
+        }
+
+        // Live update active header fare every second
+        window.extraChargesTotal = fee;
+        updateTotalFareDisplay();
+
+        // Broadcast to server ledger every 5 seconds or upon first second
+        if (waitChargeSeconds === 1 || waitChargeSeconds % 5 === 0) {
+            syncFeeToServer(billedMins, fee, 0, 0);
+        }
+    }, 1000);
+}
+
+function pauseWaitingCharge() {
+    if (waitChargeTimer) { clearInterval(waitChargeTimer); waitChargeTimer = null; }
+    isChargingActive = false;
+    const badge = document.getElementById('waitCardBadge');
+    const btnBox = document.getElementById('waitActionBtnBox');
+    if (badge) { badge.textContent = 'Paused'; badge.style.background = '#d97706'; }
+    if (btnBox) {
+        btnBox.innerHTML = '<button type="button" class="btn" style="width:100%; padding:10px; font-weight:700; background:#2563eb; color:#fff; border-radius:6px; cursor:pointer;" onclick="startWaitingChargeEngine()">▶️ Resume Waiting Charge</button>';
+    }
+}
+
+// 4. EN-ROUTE STOPOVER / MULTI-DROP WAITING (POB)
+function renderEnRouteStopControls() {
+    const title = document.getElementById('waitCardTitle');
+    const badge = document.getElementById('waitCardBadge');
+    const clock = document.getElementById('waitClockDisplay');
+    const btnBox = document.getElementById('waitActionBtnBox');
+
+    if (title) title.textContent = '🚗 En-Route Stopover & Waiting';
+    if (badge) {
+        badge.textContent = isEnRouteStopped ? 'Vehicle Stopped' : 'En Route';
+        badge.style.background = isEnRouteStopped ? '#b45309' : '#1e293b';
+        badge.style.color = '#fff';
+    }
+
+    const mins = Math.floor(enRouteSeconds / 60);
+    const secs = enRouteSeconds % 60;
+    const billedMins = Math.floor(enRouteSeconds / 60);
+    const stopFee = billedMins > 0 ? (billedMins * WAIT_RATE) : 0;
+
+    if (clock) {
+        clock.innerHTML = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0') + (stopFee > 0 ? ' <span style="font-size:0.95rem; color:#fde047;">(+£' + stopFee.toFixed(2) + ')</span>' : '');
+        clock.style.color = '#38bdf8';
+    }
+
+    if (btnBox) {
+        if (!isEnRouteStopped) {
+            btnBox.innerHTML = '<button type="button" class="btn" style="width:100%; padding:12px; font-weight:800; background:#d97706; color:#fff; border-radius:6px; cursor:pointer;" onclick="toggleEnRouteTimer()">🛑 Passenger Stopped (Shop / Via / Wait)</button>';
+        } else {
+            btnBox.innerHTML = '<button type="button" class="btn" style="width:100%; padding:12px; font-weight:800; background:#15803d; color:#fff; border-radius:6px; cursor:pointer;" onclick="toggleEnRouteTimer()">▶️ Passenger Returned (Resume Journey)</button>';
+        }
+    }
+}
+
+function toggleEnRouteTimer() {
+    if (!isEnRouteStopped) {
+        isEnRouteStopped = true;
+        renderEnRouteStopControls();
+
+        enRouteTimer = setInterval(() => {
+            enRouteSeconds++;
+            
+            const billedMins = Math.floor(enRouteSeconds / 60);
+            const rate = (masterTariff && masterTariff.waitingRatePerMin) ? masterTariff.waitingRatePerMin : (window.WAIT_RATE || 0.35);
+            const stopFee = billedMins * rate;
+            const arrMins = Math.floor(waitChargeSeconds / 60);
+            const arrFee = arrMins * rate;
+            const combinedExtra = arrFee + stopFee;
+
+            // Live update header fare on screen every second
+            window.extraChargesTotal = combinedExtra;
+            updateTotalFareDisplay();
+
+            // Refresh the stopover control badge & counter
+            renderEnRouteStopControls();
+
+            // Sync to server every 5 seconds or upon first second
+            if (enRouteSeconds === 1 || enRouteSeconds % 5 === 0) {
+                syncFeeToServer(arrMins, combinedExtra, billedMins, stopFee);
+            }
+        }, 1000);
+    } else {
+        isEnRouteStopped = false;
+        if (enRouteTimer) { clearInterval(enRouteTimer); enRouteTimer = null; }
+        renderEnRouteStopControls();
+    }
+}
+
+function syncFeeToServer(arrMins, totalFee, enRouteMins, enRouteFee) {
+    const trip = window.activeTrip || window.currentTrip;
+    if (!trip || !trip.id) return;
+    
+    window.extraChargesTotal = parseFloat(totalFee || 0);
+    const calculatedTotal = updateTotalFareDisplay();
+
+    if (typeof socket !== 'undefined') {
+        socket.emit('driver_update_waiting', {
+            jobId: trip.id,
+            arrivalWaitMins: arrMins || 0,
+            enRouteWaitMins: enRouteMins || 0,
+            waitingCharge: parseFloat(totalFee || 0).toFixed(2),
+            totalFare: calculatedTotal
+        });
+    }
+}
+
+
+    /* cleaned redundant wallet listener */
+
+</script>
+
+
+        <script>
+            // keep-alive-active: prevent idle screensaver/green saver mode
+            window.addEventListener("mousemove", () => { window._lastActive = Date.now(); });
+            window.addEventListener("touchstart", () => { window._lastActive = Date.now(); });
+            setInterval(() => { window._lastActive = Date.now(); }, 30000);
+        </script>
+        
+<script>
+    // Wall-clock time sync for background tab throttling prevention
+    let _wasDisconnected = false;
+        if (typeof socket !== "undefined") {
+            socket.on("disconnect", () => { _wasDisconnected = true; });
+        }
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+                if (typeof socket !== "undefined") {
+                    if (!socket.connected) {
+                        console.log("🔌 Reconnecting socket after wake...");
+                        socket.connect();
+                        _wasDisconnected = true;
+                    }
+                    // ONLY sync if connection actually dropped during sleep
+                    if (_wasDisconnected) {
+                        const savedDriver = localStorage.getItem("driverId") || sessionStorage.getItem("driverId");
+                        if (savedDriver) {
+                            socket.emit("driver_wakeup_sync", { driverId: savedDriver });
+                        }
+                        _wasDisconnected = false;
+                    }
+                }
+            }
+        });
+</script>
+
+        <script>
+            // Bulletproof background tab wall-clock timer sync
+            window._wallClockTimerActive = true;
+            setInterval(() => {
+                if (!window._wallClockTimerActive) return;
+                // If there is an active job in ARRIVED status, re-evaluate grace time using real Date.now()
+                if (window.activeJob && (window.activeJob.status === "ARRIVED" || window.activeJob.status === "Arrived")) {
+                    if (typeof updateArrivedTimer === "function") {
+                        updateArrivedTimer();
+                    }
+                }
+            }, 1000);
+        </script>
+        
+
+<script>
+    // Absolute wall-clock sync for grace timer across background tab switches
+    let _wasDisconnected = false;
+        if (typeof socket !== "undefined") {
+            socket.on("disconnect", () => { _wasDisconnected = true; });
+        }
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+                if (typeof socket !== "undefined") {
+                    if (!socket.connected) {
+                        console.log("🔌 Reconnecting socket after wake...");
+                        socket.connect();
+                        _wasDisconnected = true;
+                    }
+                    // ONLY sync if connection actually dropped during sleep
+                    if (_wasDisconnected) {
+                        const savedDriver = localStorage.getItem("driverId") || sessionStorage.getItem("driverId");
+                        if (savedDriver) {
+                            socket.emit("driver_wakeup_sync", { driverId: savedDriver });
+                        }
+                        _wasDisconnected = false;
+                    }
+                }
+            }
+        });
+</script>
+
+
+<script>
+  // Google Maps style Screen Wake Lock to prevent browser screen sleep
+  let driverWakeLock = null;
+  async function requestDriverWakeLock() {
+    if ("wakeLock" in navigator && document.visibilityState === "visible") {
+      try {
+        driverWakeLock = await navigator.wakeLock.request("screen");
+        driverWakeLock.addEventListener("release", () => {
+          console.log("Screen Wake Lock released by system.");
+        });
+        console.log("💡 Screen Wake Lock active: Screen will stay awake like Google Maps!");
+      } catch (err) {
+        console.warn("Wake lock request failed:", err.name, err.message);
+      }
+    }
+  }
+
+  // Re-acquire wake lock whenever user comes back to the tab
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState === "visible") {
+      await requestDriverWakeLock();
+    }
+  });
+
+  // Request lock on initial load and first user touch/click
+  window.addEventListener("click", () => {
+    if (!driverWakeLock) requestDriverWakeLock();
+  }, { once: true });
+
+  requestDriverWakeLock();
+</script>
+
+
+    <script>
+        // Bulletproof wake-up socket reconnect & pending job sync
+        let _wasDisconnected = false;
+        if (typeof socket !== "undefined") {
+            socket.on("disconnect", () => { _wasDisconnected = true; });
+        }
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+                if (typeof socket !== "undefined") {
+                    if (!socket.connected) {
+                        console.log("🔌 Reconnecting socket after wake...");
+                        socket.connect();
+                        _wasDisconnected = true;
+                    }
+                    // ONLY sync if connection actually dropped during sleep
+                    if (_wasDisconnected) {
+                        const savedDriver = localStorage.getItem("driverId") || sessionStorage.getItem("driverId");
+                        if (savedDriver) {
+                            socket.emit("driver_wakeup_sync", { driverId: savedDriver });
+                        }
+                        _wasDisconnected = false;
+                    }
+                }
+            }
+        });
+                    }
+                }
+            }
+        });
+    </script>
+    
+
+    <script>
+        // Listen for full state sync updates upon wake-up
+        if (typeof socket !== "undefined") {
+            socket.on("active_job_sync", (job) => {
+                if (job && typeof renderActiveJob === "function") {
+                    renderActiveJob(job);
+                }
+            });
+            socket.on("bid_board_list", (jobs) => {
+                if (jobs && typeof renderBidBoard === "function") {
+                    renderBidBoard(jobs);
+                }
+            });
+            socket.on("stand_rank_update", (data) => {
+                if (data && typeof updateStandRankDisplay === "function") {
+                    updateStandRankDisplay(data);
+                }
+            });
+        }
+    </script>
+    
+
+<script>
+// Dynamic Driver Location & Plot Updater
+if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(position => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        
+        // Update location text element if it exists
+        const areaEl = document.getElementById("current-area") || document.getElementById("location-display") || document.querySelector(".current-location");
+        if (areaEl) {
+            // If we are far from Bath / Larkhall center, show generic or coordinates/village fallback
+            if (lat < 51.35 || lat > 51.45 || lng < -2.45 || lng > -2.2) {
+                areaEl.innerText = "Outside Plot / Village (Live GPS)";
+            } else {
+                areaEl.innerText = "Larkhall / Bath Zone";
+            }
+        }
+    }, err => console.error(err), { enableHighAccuracy: true });
+}
+</script>
+
+<script>
+// Smart 5-Plot Multi-Zone GPS Matcher
+if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(position => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const plots = [
+            { name: "City Centre", lat: 51.381, lng: -2.359 },
+            { name: "Station", lat: 51.378, lng: -2.353 },
+            { name: "Larkhall", lat: 51.400, lng: -2.335 },
+            { name: "Oldfield Park", lat: 51.380, lng: -2.375 },
+            { name: "Weston", lat: 51.393, lng: -2.395 }
+        ];
+        let closest = "Outside Plot / Village";
+        let minDistance = 999999;
+        if (lat >= 51.35 && lat <= 51.43 && lng >= -2.43 && lng <= -2.30) {
+            plots.forEach(p => {
+                const dist = Math.sqrt(Math.pow(lat - p.lat, 2) + Math.pow(lng - p.lng, 2));
+                if (dist < minDistance) { minDistance = dist; closest = p.name; }
+            });
+        } else {
+            closest = "Outside Plot / Village (Live GPS)";
+        }
+        window.myCurrentPlot = closest;
+        const pNameEl = document.getElementById("curPlotNameTxt");
+        if (pNameEl) pNameEl.textContent = closest;
+        const areaEl = document.getElementById("current-area") || document.getElementById("location-display");
+        if (areaEl) areaEl.innerText = closest;
+    }, err => console.error(err), { enableHighAccuracy: true });
+}
+</script>
+</body>
+</html>

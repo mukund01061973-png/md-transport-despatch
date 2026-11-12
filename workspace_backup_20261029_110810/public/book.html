@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="https://js.stripe.com/v3/"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book a Taxi Online | MD Transport Bath</title>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: #0b1120; color: #ffffff; margin: 0; padding: 16px; font-size: 14px; }
+        .booking-card { max-width: 520px; margin: 20px auto; background: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        h2 { color: #38bdf8; margin-top: 0; text-align: center; }
+        label { display: block; color: #94a3b8; margin-bottom: 4px; font-size: 0.8rem; font-weight: 600; }
+        input, select, button { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #ffffff; margin-bottom: 10px; font-size: 0.9rem; outline: none; }
+        input:focus, select:focus { border-color: #38bdf8; }
+        button { background: #0284c7; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; padding: 12px; }
+        button:hover { background: #0369a1; }
+        .btn-green { background: #10b981; }
+        .btn-green:hover { background: #059669; }
+        .btn-secondary { background: #334155; }
+        .btn-secondary:hover { background: #475569; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .estimate-banner { background: #0f172a; border: 1px solid #0284c7; border-radius: 8px; padding: 12px; text-align: center; margin-bottom: 14px; }
+        .estimate-amount { font-size: 2rem; font-weight: 800; color: #10b981; font-family: 'Courier New', Courier, monospace; }
+        .confirmation-view { display: none; text-align: center; padding: 20px; }
+        .status-badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 0.85rem; margin: 8px 0; background: #0c4a6e; color: #38bdf8; border: 1px solid #0284c7; }
+        .status-pulse { animation: pulse 1.8s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .trip-details-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; text-align: left; margin: 12px 0; font-size: 0.88rem; }
+    </style>
+
+<style id="liveAddressDropdownCss">
+.addr-suggest-wrap { position: relative; width: 100%; }
+.addr-suggest-box {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #0f172a;
+  border: 1px solid #38bdf8;
+  border-radius: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 999999;
+  display: none;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.85);
+  margin-top: 2px;
+}
+.addr-suggest-item {
+  padding: 10px 14px;
+  border-bottom: 1px solid #1e293b;
+  cursor: pointer;
+  color: #f8fafc;
+  font-size: 0.88rem;
+  line-height: 1.3;
+}
+.addr-suggest-item:hover {
+  background: #0284c7;
+  color: #ffffff;
+}
+.addr-suggest-item strong {
+  color: #38bdf8;
+  display: block;
+}
+.addr-suggest-item:hover strong {
+  color: #ffffff;
+}
+.addr-suggest-item small {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  display: block;
+}
+.addr-suggest-item:hover small {
+  color: #e2e8f0;
+}
+</style>
+
+</head>
+<body>
+
+    <div class="booking-card" id="bookingFormSection">
+        <h2>🚕 Book Your Ride</h2>
+        <p style="text-align:center; color:#94a3b8; font-size:0.85rem; margin-top:-8px; margin-bottom:16px;">Fast, reliable transfers across Bath, Somerset & UK Airports</p>
+
+        
+<datalist id="bathHotspots">
+    <option value="Bath Spa Railway Station, Dorchester St, BA1 1SU">
+    <option value="Bath Bus Station, Dorchester St, BA1 1ER">
+    <option value="The Roman Baths, Abbey Churchyard, BA1 1LZ">
+    <option value="Royal Crescent, Bath, BA1 2LS">
+    <option value="The Circus, Bath, BA1 2EW">
+    <option value="Milsom Street, Bath, BA1 1DA">
+    <option value="Pulteney Bridge, Argyle St, BA2 4BA">
+    <option value="University of Bath, Claverton Down, BA2 7AY">
+    <option value="Bath Spa University, Newton Park, BA2 9BN">
+    <option value="Royal United Hospital (RUH), Combe Park, BA1 3NG">
+    <option value="Kingsmead Square, Bath, BA1 2AB">
+    <option value="Green Park Station, Bath, BA1 1JB">
+    <option value="Lansdown Park and Ride, Bath, BA1 9BJ">
+    <option value="Odd Down Park and Ride, Bath, BA2 2PF">
+    <option value="Newbridge Park and Ride, Bath, BA1 3NB">
+    <option value="Apex City of Bath Hotel, James St West, BA1 2DA">
+    <option value="The Gainsborough Bath Spa, Beau St, BA1 1QY">
+    <option value="Macdonald Bath Spa Hotel, Sydney Rd, BA2 6JF">
+    <option value="Bristol Airport (BRS), Bristol, BS48 3DY">
+    <option value="London Heathrow Airport (LHR), Hounslow, TW6 1AP">
+</datalist>
+
+            <form id="onlineBookingForm" onsubmit="submitCustomerBooking(event)">
+            <div class="grid-2">
+                <div>
+                    <label>Your Name:</label>
+                    <input type="text" id="custName" placeholder="e.g. Sarah Jenkins" required>
+                </div>
+                <div>
+                    <label>Mobile Number:</label>
+                    <input type="tel" id="custPhone" placeholder="07795681747" required>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div>
+                    <label>Passengers:</label>
+                    <select id="custPax" onchange="onPaxChange()">
+                        <option value="1">1 Passenger</option>
+                        <option value="2">2 Passengers</option>
+                        <option value="4" selected>4 Passengers</option>
+                        <option value="6">6 Passengers</option>
+                        <option value="7">7 Passengers</option>
+                        <option value="8">8 Passengers</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Vehicle Preference:</label>
+                    <select id="custVehicleClass" onchange="calculateQuote()">
+                        <option value="ANY" selected>⚡ Any Car (First Available)</option>
+                        <option value="LOW_CAR">🚗 Saloon / Low Car (Easy Step-In)</option>
+                        <option value="Saloon">🚙 Saloon Car</option>
+                        <option value="Estate">📦 Estate Car (+Extra Luggage)</option>
+                        <option value="MPV_6">👨‍👩‍👧‍👦 6-Seat MPV</option>
+                        <option value="Minibus_7">🚐 7-Seat Minibus</option>
+                        <option value="Minibus_8">🚐 8-Seat Minibus</option>
+                        <option value="Executive">⭐ Executive VIP</option>
+                    </select>
+                </div>
+            </div>
+
+            <label>Pickup Postcode, Street or Landmark:</label>
+            <div class="addr-suggest-wrap">
+       <input type="text" id="custPickup" placeholder="e.g. BA1 1AA, Milsom St, or Bath Spa Station" oninput="handleAddressTypeAhead('custPickup', 'pickupSuggestBox')" autocomplete="off" required>
+       <div id="pickupSuggestBox" class="addr-suggest-box"></div>
+     </div>
+            <input type="text" id="custPickupBuilding" placeholder="📍 Door / Flat No. or Building Name (e.g. Flat 3, No. 12)" style="margin-top: -6px; margin-bottom: 12px; font-size: 0.85rem; border-color: #334155;">
+
+            <div id="viasWrap"></div>
+            <button type="button" style="background:#334155; font-size:0.8rem; padding:6px; margin-bottom:10px;" onclick="addViaInput()">+ Add Intermediate Stop</button>
+
+            <label>Destination Postcode, Street or Airport:</label>
+            <div class="addr-suggest-wrap">
+       <input type="text" id="custDropoff" placeholder="e.g. BA1 6BA, Bristol Airport or Heathrow" oninput="handleAddressTypeAhead('custDropoff', 'dropoffSuggestBox')" autocomplete="off" required>
+       <div id="dropoffSuggestBox" class="addr-suggest-box"></div>
+     </div>
+            <input type="text" id="custDropoffBuilding" placeholder="🏁 Dropoff Details (e.g. Terminal 2, Entrance B, Door 8)" style="margin-top: -6px; margin-bottom: 12px; font-size: 0.85rem; border-color: #334155;">
+
+            <div class="grid-2">
+                <div>
+                    <label>Payment Option:</label>
+                    <select id="custPayMethod">
+                        <option value="Cash">💵 Cash to Driver</option>
+                        <option value="Card in Car">💳 Card to Driver</option>
+                        <option value="Prepaid Online">🔒 Pay Online via Card</option>
+                    </select>
+
+            <!-- STRIPE CARD ELEMENTS CONTAINER -->
+            <div id="stripeCardSection" style="display:none; margin: 12px 0 16px; padding: 14px; background: #0f172a; border: 1px solid #38bdf8; border-radius: 8px;">
+                <label style="color: #38bdf8; font-weight: 600; font-size: 0.85rem; margin-bottom: 8px; display: block;">
+                    🔒 Secure Card Details (Pre-pay Online)
+                </label>
+                <div id="stripeCardElement" style="padding: 10px; background: #1e293b; border-radius: 6px; border: 1px solid #334155; margin-bottom: 8px;"></div>
+                <div id="stripeCardErrors" role="alert" style="color: #f87171; font-size: 0.8rem;"></div>
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">
+                    💳 256-bit encrypted via Stripe. Driver will see <b>PREPAID</b>.
+                </div>
+            </div>
+
+                </div>
+                <div>
+                    <label>Pets Accompanying:</label>
+                    <select id="custPet" onchange="calculateQuote()">
+                        <option value="None">No Pets</option>
+                        <option value="Dog">Dog (+Surcharge)</option>
+                        <option value="Cat">Cat (+Surcharge)</option>
+                        <option value="GuideDog">Registered Guide Dog (Free)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="estimate-banner">
+                <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase;">Estimated Fixed Fare</div>
+                <div class="estimate-amount">£<span id="displayFare">8.40</span></div>
+                <div style="font-size:0.8rem; color:#38bdf8;" id="displayQuoteDetails">Enter locations to get instant price</div>
+            </div>
+
+            <button type="submit" class="btn-green" id="btnSubmitBooking">⚡ Confirm & Dispatch Booking</button>
+        </form>
+    </div>
+
+    <!-- CONFIRMATION & LIVE IN-APP TRACKING SCREEN -->
+    <div class="booking-card confirmation-view" id="confirmationSection">
+        <div style="font-size:3rem; margin-bottom:8px;">✅</div>
+        <h2 style="color:#10b981; margin-bottom:4px;">Booking Dispatched!</h2>
+        
+        <div>Reference: <strong id="confJobId" style="color:#38bdf8; font-size:1.1rem;">-</strong></div>
+        
+        <div class="status-badge status-pulse" id="confStatusText">⏳ Matching Nearest Driver...</div>
+
+        <div class="trip-details-box">
+            <div style="margin-bottom:4px;"><strong>Pickup:</strong> <span id="confPickupText">-</span></div>
+            <div style="margin-bottom:4px;"><strong>Destination:</strong> <span id="confDropoffText">-</span></div>
+            <div style="margin-bottom:4px;"><strong>Assigned Driver:</strong> <span id="confDriverText" style="color:#38bdf8; font-weight:bold;">Locating driver...</span></div>
+            <div><strong>Total Fare:</strong> <strong style="color:#10b981; font-size:1.1rem;">£<span id="confFare">0.00</span></strong></div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:14px;">
+            <button type="button" class="btn-green" onclick="startNewBooking()">➕ Book Another Ride</button>
+            <button type="button" class="btn-secondary" onclick="window.print()">🖨️ Print Receipt / Confirmation</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        let calculatedMiles = 0.0;
+        let airportList = [];
+        let trackedJobId = null;
+
+        var activeTariff = {
+            baseFlagDrop: 7.00,
+            tier1BaseFare: 7.00,
+            tier1FirstMile: 3.00,
+            firstMileRate: 3.00,
+            tier1PerMile: 2.50,
+            tier2BaseFare: 5.00,
+            tier2FirstMile: 3.00,
+            tier2PerMile: 1.80,
+            tier3BaseFare: 5.00,
+            tier3FirstMile: 3.00,
+            tier3PerMile: 1.50,
+            busySurgePct: 0,
+            busySurgePercent: 0,
+            localEstatePercent: 0.10,
+            localMpvPercent: 0.40,
+            localMinibus7Percent: 0.60,
+            localMinibus8Percent: 0.80,
+            localExecPercent: 0.80,
+            petSurcharge: 6.00,
+            viaStopFee: 5.00
+        };
+
+        
+        async function syncLiveTariff() {
+            try {
+                const res = await fetch('/api/tariff');
+                const data = await res.json();
+                if (data && data.tariff) {
+                    activeTariff = Object.assign({}, activeTariff, data.tariff);
+                    console.log('✅ Synchronized with Database Master Tariff:', activeTariff);
+                }
+                // Fetch live airport matrix
+                try {
+                    const airRes = await fetch('/api/airports');
+                    if (airRes.ok) {
+                        const airData = await airRes.json();
+                        airportList = airData.airports || airData || [];
+                        console.log('✈️ Synchronized airport matrix:', airportList.length, 'airports');
+                    }
+                } catch(errAir) {}
+            } catch(e) {}
+            calculateQuote();
+        }
+        syncLiveTariff();
+        if (typeof socket !== 'undefined' && socket) {
+            socket.on('update_airports', function(airports) {
+                if (Array.isArray(airports)) {
+                    airportList = airports;
+                    console.log('⚡ Live Airport Matrix received via WebSocket:', airportList.length);
+                    calculateQuote();
+                }
+            });
+            socket.on('update_tariff', function(incomingTariff) {
+                if (incomingTariff) {
+                    activeTariff = Object.assign({}, activeTariff, incomingTariff);
+                    console.log('⚡ Live Master Tariff received via WebSocket:', activeTariff);
+                    calculateQuote();
+                }
+            });
+        }
+
+        let debounceTimer = null;
+        function triggerAutoRouting() {
+            calculateQuote();
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(async function() {
+                const pickup = document.getElementById('custPickup') ? document.getElementById('custPickup').value.trim() : '';
+                const dropoff = document.getElementById('custDropoff') ? document.getElementById('custDropoff').value.trim() : '';
+                if (!pickup || !dropoff) return;
+
+                try {
+                    // Use the exact OSRM distance endpoint
+                    const res = await fetch('/api/calculate-distance?from=' + encodeURIComponent(pickup) + '&to=' + encodeURIComponent(dropoff));
+                    const data = await res.json();
+                    if (data && data.miles) {
+                        calculatedMiles = parseFloat(data.miles);
+                    }
+                } catch(e) {
+                    calculatedMiles = 2.1;
+                }
+                calculateQuote();
+            }, 350);
+        }
+
+        function calculateQuote() {
+            const pickupEl = document.getElementById('custPickup');
+            const pickup = pickupEl ? pickupEl.value.trim().toLowerCase() : '';
+            const dropoffEl = document.getElementById('custDropoff');
+            const dropoff = dropoffEl ? dropoffEl.value.trim().toLowerCase() : '';
+            const fullRoute = pickup + ' ' + dropoff;
+            const paxEl = document.getElementById('custPax');
+            const pax = paxEl ? parseInt(paxEl.value || '4', 10) : 4;
+            const vehEl = document.getElementById('custVehicleClass');
+            let vClass = vehEl ? vehEl.value : 'Saloon';
+            const petEl = document.getElementById('custPet');
+            const petVal = petEl ? petEl.value : 'None';
+            const hasPet = (petVal === 'Dog' || petVal === 'Cat');
+            const viaCount = document.querySelectorAll('.cust-via-input').length;
+
+            if (pax >= 8) vClass = 'Minibus_8';
+            else if (pax === 7 && !['Minibus_7', 'Minibus_8'].includes(vClass)) vClass = 'Minibus_7';
+            else if (pax >= 5 && !['MPV_6', 'Minibus_7', 'Minibus_8'].includes(vClass)) vClass = 'MPV_6';
+            if (vehEl && pax >= 5 && vehEl.value !== vClass) vehEl.value = vClass;
+
+            let airportMatch = (typeof airportList !== 'undefined' && Array.isArray(airportList)) 
+                ? airportList.find(function(a) { 
+                    if (!a) return false;
+                    const name = (a.name || '').toLowerCase();
+                    const code = (a.iataCode || '').toLowerCase();
+                    const kw = (a.keywords || '').toLowerCase();
+                    const pc = (a.postcode || '').toLowerCase();
+
+                    // IATA word boundary check (LHR, BRS, LGW, CWL, BIR)
+                    if (code) {
+                        const codeRegex = new RegExp('\\b' + code + '\\b', 'i');
+                        if (codeRegex.test(pickup) || codeRegex.test(dropoff)) return true;
+                    }
+
+                    // Specific airport keywords
+                    if (kw) {
+                        const terms = kw.split(',').map(function(t) { return t.trim(); }).filter(Boolean);
+                        if (terms.some(function(t) { return fullRoute.includes(t); })) return true;
+                    }
+
+                    // Postcode match
+                    if (pc && fullRoute.includes(pc)) return true;
+
+                    // Full airport name match
+                    if (name && fullRoute.includes(name)) return true;
+
+                    // Airport tokens excluding general city names
+                    const cityStopWords = ['bristol', 'london', 'airport', 'international', 'terminal'];
+                    const distinctTokens = name.split(' ')
+                        .map(function(w) { return w.replace(/[^a-z0-9]/gi, ''); })
+                        .filter(function(w) { return !cityStopWords.includes(w) && w.length >= 4; });
+
+                    if (distinctTokens.length > 0 && distinctTokens.some(function(tok) { return fullRoute.includes(tok); })) {
+                        return true;
+                    }
+
+                    return false;
+                }) 
+                : null;
+
+            let finalFare = 0.0;
+            const miles = (typeof calculatedMiles !== 'undefined' && calculatedMiles > 0) ? calculatedMiles : 0.0;
+
+            if (airportMatch) {
+                let base = parseFloat(airportMatch.baseRate || 0);
+                let mult = 1.0;
+                if (vClass === 'Estate') mult += 0.10;
+                else if (vClass === 'MPV_6') mult += 0.45;
+                else if (vClass === 'Minibus_7' || vClass === 'Minibus_8') mult += 0.60;
+                else if (vClass === 'Executive') mult += 0.70;
+                finalFare = (base * mult) + (viaCount * 5.00);
+                const isHeathrow = airportMatch.iataCode === "LHR" || (airportMatch.name && airportMatch.name.toLowerCase().includes("heathrow"));
+                const baselineMiles = isHeathrow ? 100 : 30;
+                if (miles > baselineMiles) {
+                    const extraMiles = miles - baselineMiles;
+                    const extraPerMileRate = parseFloat(activeTariff.tier2PerMile) || 1.80;
+                    finalFare += (extraMiles * extraPerMileRate * mult);
+                }
+                const detEl = document.getElementById("displayQuoteDetails");
+                if (detEl) {
+                    detEl.textContent = "✈️ Fixed Airport: " + airportMatch.name + " (" + vClass + ")" + (miles > baselineMiles ? " + Outside Area Surcharge" : "");
+                }
+            } else {
+                // Exact formula from calculateProgressiveTariff in admin.html
+                const baseFee = parseFloat(activeTariff.baseFlagDrop) || 5.00;
+                const firstMileRate = parseFloat(activeTariff.firstMileRate) || 2.00;
+                const tier1Rate = parseFloat(activeTariff.tier1PerMile) || 2.00;
+                const tier2Rate = parseFloat(activeTariff.tier2PerMile) || 1.80;
+                const tier3Rate = parseFloat(activeTariff.tier3PerMile) || 1.50;
+                const viaStopFee = parseFloat(activeTariff.viaStopFee) || 5.00;
+                const petFee = parseFloat(activeTariff.petSurcharge) || 6.00;
+                const busySurgePct = (activeTariff.busySurgePct !== undefined && !isNaN(parseFloat(activeTariff.busySurgePct))) ? parseFloat(activeTariff.busySurgePct) : 0.0;
+
+                let distanceCost = 0.0;
+                if (miles > 0) {
+                    if (miles <= 25) {
+                        distanceCost = (miles <= 1) ? firstMileRate * miles : firstMileRate + ((miles - 1) * tier1Rate);
+                    } else if (miles <= 50) {
+                        const tier1Total = firstMileRate + (24 * tier1Rate);
+                        const tier2Miles = miles - 25;
+                        distanceCost = tier1Total + (tier2Miles * tier2Rate);
+                    } else {
+                        const tier1Total = firstMileRate + (24 * tier1Rate);
+                        const tier2Total = 25 * tier2Rate;
+                        const tier3Miles = miles - 50;
+                        distanceCost = tier1Total + tier2Total + (tier3Miles * tier3Rate);
+                    }
+                }
+
+                let subtotal = baseFee + distanceCost;
+                let multiplier = 1.0;
+                if (vClass === 'Estate') multiplier += 0.10;
+                else if (vClass === 'MPV_6') multiplier += 0.40;
+                else if (vClass === 'Minibus_7' || vClass === 'Minibus_8') multiplier += 0.60;
+                else if (vClass === 'Executive') multiplier += 0.70;
+
+                let total = subtotal * multiplier;
+                if (busySurgePct > 0) {
+                    total = total * (1.0 + (busySurgePct / 100));
+                }
+
+                total += (viaCount * viaStopFee);
+                if (hasPet) total += petFee;
+
+                finalFare = total;
+
+                const detEl = document.getElementById('displayQuoteDetails');
+                if (detEl) {
+                    if (miles > 0) {
+                        detEl.textContent = miles.toFixed(1) + ' Miles | ' + pax + ' Pax (' + (vClass === 'Saloon' ? 'ANY' : vClass) + ')';
+                    } else {
+                        detEl.textContent = 'Standard Starting Rate';
+                    }
+                }
+            }
+
+            const fareSpan = document.getElementById('displayFare');
+            if (fareSpan) {
+                fareSpan.textContent = finalFare.toFixed(2);
+            }
+            return finalFare;
+        }
+
+
+
+        function resetBookingForm() {
+            const form = document.getElementById('onlineBookingForm');
+            if (form) form.reset();
+            const confView = document.getElementById('bookingConfirmationView');
+            if (confView) confView.style.display = 'none';
+            if (form) form.style.display = 'block';
+            calculatedMiles = 0.0;
+            const submitBtn = document.getElementById('btnSubmitBooking');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '⚡ Confirm & Dispatch Booking';
+            }
+            calculateQuote();
+        }
+
+        async function submitCustomerBooking(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('btnSubmitBooking');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Dispatching to Fleet...';
+            }
+
+            const vias = Array.from(document.querySelectorAll('.cust-via-input')).map(function(i) { return i.value.trim(); }).filter(function(v) { return v !== ''; });
+            const pax = parseInt(document.getElementById('custPax').value || '1', 10);
+            let vClass = document.getElementById('custVehicleClass').value;
+            
+            if (pax >= 8) vClass = 'Minibus_8';
+            else if (pax === 7) vClass = 'Minibus_7';
+            else if (pax >= 5) vClass = 'MPV_6';
+            else if (vClass === 'ANY') vClass = 'Saloon';
+
+            const petVal = document.getElementById('custPet').value;
+            const fareSpan = document.getElementById('displayFare');
+            let fareAmount = 8.40;
+            if (fareSpan) {
+                const parsed = parseFloat(fareSpan.textContent.replace(/[^0-9.]/g, ''));
+                if (!isNaN(parsed) && parsed > 0) fareAmount = parsed;
+            }
+
+            const payMethod = document.getElementById('custPayMethod').value;
+
+            if (payMethod === 'Prepaid Online' && typeof stripeInstance !== 'undefined' && stripeInstance && typeof stripeCard !== 'undefined' && stripeCard) {
+                if (submitBtn) submitBtn.textContent = '🔒 Authorizing Card Payment...';
+                try {
+                    const piRes = await fetch('/api/create-payment-intent', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            amount: fareAmount,
+                            passengerName: document.getElementById('custName').value.trim(),
+                            pickup: document.getElementById('custPickup').value.trim(),
+                            dropoff: document.getElementById('custDropoff').value.trim()
+                        })
+                    });
+                    const piData = await piRes.json();
+                    if (!piData.clientSecret) throw new Error(piData.error || 'Payment initialization failed');
+
+                    if (!piData.simulation) {
+                        const confirmResult = await stripeInstance.confirmCardPayment(piData.clientSecret, {
+                            payment_method: { card: stripeCard }
+                        });
+                        if (confirmResult.error) {
+                            document.getElementById('stripeCardErrors').textContent = confirmResult.error.message;
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                                submitBtn.textContent = '⚡ Confirm & Dispatch Booking';
+                            }
+                            return;
+                        }
+                    }
+                } catch(stripeErr) {
+                    alert('Card payment error: ' + stripeErr.message);
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = '⚡ Confirm & Dispatch Booking';
+                    }
+                    return;
+                }
+            }
+
+            const pMain = document.getElementById('custPickup').value.trim();
+            const pBldg = (document.getElementById('custPickupBuilding') ? document.getElementById('custPickupBuilding').value.trim() : '');
+            const pickupFull = pBldg ? (pBldg + ', ' + pMain) : pMain;
+
+            const dMain = document.getElementById('custDropoff').value.trim();
+            const dBldg = (document.getElementById('custDropoffBuilding') ? document.getElementById('custDropoffBuilding').value.trim() : '');
+            const dropoffFull = dBldg ? (dBldg + ', ' + dMain) : dMain;
+
+            const jobPayload = {
+                passenger: document.getElementById('custName').value.trim(),
+                phone: document.getElementById('custPhone').value.trim(),
+                pickup: pickupFull,
+                vias: vias,
+                dropoff: dropoffFull,
+                fare: fareAmount,
+                vehicleClass: vClass,
+                passengers: pax,
+                paymentMethod: payMethod,
+                petType: petVal,
+                luggage: 2,
+                notes: 'Web Self-Booking'
+            };
+
+            socket.emit('create_job', jobPayload);
+
+            document.getElementById('onlineBookingForm').style.display = 'none';
+            document.getElementById('bookingConfirmationView').style.display = 'block';
+            document.getElementById('confPassenger').textContent = jobPayload.passenger;
+            document.getElementById('confRoute').textContent = pickupFull + ' ➔ ' + dropoffFull;
+            document.getElementById('confFare').textContent = '£' + fareAmount.toFixed(2);
+            document.getElementById('confVehicle').textContent = vClass + ' (' + pax + ' Passengers)';
+        }
+</script>
+
+<script id="typeaheadScript">
+let _typeTimer = null;
+
+async function handleAddressTypeAhead(inputId, boxId) {
+  triggerAutoRouting();
+  clearTimeout(_typeTimer);
+  const input = document.getElementById(inputId);
+  const box = document.getElementById(boxId);
+  const val = (input.value || '').trim();
+
+  if (val.length < 3) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+
+  _typeTimer = setTimeout(async () => {
+    try {
+      const res = await fetch('/api/address-search?q=' + encodeURIComponent(val));
+      const data = await res.json();
+      const items = data.results || [];
+
+      if (items.length === 0) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+      }
+
+      box.innerHTML = items.map(it => `
+        <div class="addr-suggest-item" onclick="selectSuggestion('${inputId}', '${boxId}', '${encodeURIComponent(it.full)}')">
+          <strong>${it.primary}</strong>
+          <small>${it.secondary}</small>
+        </div>
+      `).join('');
+      box.style.display = 'block';
+    } catch(err) {
+      box.style.display = 'none';
+    }
+  }, 220);
+}
+
+
+function selectSuggestion(inputId, boxId, encodedVal) {
+    const val = decodeURIComponent(encodedVal);
+    const input = document.getElementById(inputId);
+    if (input) input.value = val;
+    const box = document.getElementById(boxId);
+    if (box) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+    }
+    triggerAutoRouting();
+}
+
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.addr-suggest-wrap')) {
+    document.querySelectorAll('.addr-suggest-box').forEach(b => b.style.display = 'none');
+  }
+});
+</script>
+
+
+<script id="stripeClientIntegration">
+let stripeInstance = null;
+let stripeElements = null;
+let stripeCard = null;
+let stripeConfigLoaded = false;
+
+async function initStripeIfPrepaid() {
+  const method = document.getElementById('custPayMethod').value;
+  const section = document.getElementById('stripeCardSection');
+  if (!section) return;
+
+  if (method === 'Prepaid Online') {
+    section.style.display = 'block';
+    if (!stripeConfigLoaded) {
+      try {
+        const res = await fetch('/api/stripe-config');
+        const data = await res.json();
+        if (data && data.enabled && data.publishableKey) {
+          stripeInstance = Stripe(data.publishableKey);
+          stripeElements = stripeInstance.elements();
+          stripeCard = stripeElements.create('card', {
+            style: {
+              base: {
+                color: '#f8fafc',
+                fontFamily: 'system-ui, sans-serif',
+                fontSize: '15px',
+                '::placeholder': { color: '#64748b' }
+              },
+              invalid: { color: '#f87171' }
+            }
+          });
+          stripeCard.mount('#stripeCardElement');
+          stripeCard.on('change', (e) => {
+            const errDiv = document.getElementById('stripeCardErrors');
+            errDiv.textContent = e.error ? e.error.message : '';
+          });
+        } else {
+          // Simulation / Dev sandbox mode notice
+          document.getElementById('stripeCardElement').innerHTML =
+            '<div style="color:#38bdf8; font-size:0.85rem; padding:4px;">⚡ Stripe Simulation Active: Card will be pre-authorized automatically on confirm.</div>';
+        }
+        stripeConfigLoaded = true;
+      } catch(e) {
+        console.warn('Stripe init fallback:', e);
+      }
+    }
+  } else {
+    section.style.display = 'none';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const paySelect = document.getElementById('custPayMethod');
+  if (paySelect) {
+    paySelect.addEventListener('change', initStripeIfPrepaid);
+  }
+});
+</script>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const passengerInput = document.getElementById("passengers") || document.querySelector("select[name="passengers"]");
+    const vehicleCards = document.querySelectorAll(".vehicle-option, .car-option, .vehicle-card");
+    if (passengerInput) {
+        passengerInput.addEventListener("change", function() {
+            const passengerCount = parseInt(this.value) || 1;
+            vehicleCards.forEach(card => {
+                const maxCapacity = parseInt(card.getAttribute("data-capacity") || 4);
+                if (passengerCount > maxCapacity) {
+                    card.style.display = "none";
+                } else {
+                    card.style.display = "block";
+                }
+            });
+        });
+    }
+});
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const passengerInput = document.getElementById("passengers") || document.querySelector("select[name="passengers"]");
+    const vehicleCards = document.querySelectorAll(".vehicle-option, .car-option, .vehicle-card");
+    const priceDisplay = document.getElementById("total-price") || document.querySelector(".total-price, #price");
+
+    if (passengerInput) {
+        passengerInput.addEventListener("change", function() {
+            const passengerCount = parseInt(this.value) || 1;
+            vehicleCards.forEach(card => {
+                const maxCapacity = parseInt(card.getAttribute("data-capacity") || 4);
+                const baseMultiplier = parseFloat(card.getAttribute("data-multiplier") || 1);
+                
+                if (passengerCount > maxCapacity) {
+                    card.style.display = "none";
+                } else {
+                    card.style.display = "block";
+                    // Update price if a base price exists
+                    const basePrice = parseFloat(card.getAttribute("data-base-price") || card.dataset.price || 15);
+                    const calculatedPrice = (basePrice * (passengerCount > 4 ? 1.4 : 1)).toFixed(2);
+                    const priceEl = card.querySelector(".price-text");
+                    if (priceEl) priceEl.innerText = "£" + calculatedPrice;
+                }
+            });
+        });
+    }
+});
+</script>
+</body>
+</html>

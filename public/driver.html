@@ -704,14 +704,25 @@
             activeBids = [];
             renderBidBoard();
             // Update Stand and Queue Rank from server
-            if (myDriver) {
-                const pNameEl = document.getElementById("curPlotNameTxt");
-                const pRankEl = document.getElementById("curPlotRankTxt");
-                if (pNameEl) pNameEl.textContent = myDriver.currentPlotName || "-";
-                if (pRankEl) pRankEl.textContent = "Position #" + (myDriver.plotRank || 1);
-                const hdrRank = document.getElementById("hdrQueueRank");
-                if (hdrRank) hdrRank.textContent = "🚕 Stand: " + (myDriver.currentPlotName || "Unassigned") + " • #" + (myDriver.plotRank || 1);
-            }
+           // Update Stand and Queue Rank from server
+if (myDriver) {
+    const activePlot = myDriver.currentPlotName || myDriver.plotName || "Stand";
+    const activeRank = myDriver.plotRank || 0;
+
+    const pNameEl = document.getElementById("curPlotNameTxt");
+    const pRankEl = document.getElementById("curPlotRankTxt");
+    if (pNameEl) pNameEl.textContent = activePlot;
+    
+    if (pRankEl) {
+        pRankEl.textContent = activeRank > 0 ? ("Position #" + activeRank) : "In Standby";
+    }
+    
+    const hdrRank = document.getElementById("hdrQueueRank");
+    if (hdrRank) {
+        hdrRank.textContent = "🚕 Stand: " + activePlot + (activeRank > 0 ? " • #" + activeRank : " • Standby");
+    }
+}
+
 
             // Load Master Tariff values
             if (res.tariff) {
@@ -742,10 +753,29 @@
 
             startLocationWatcher();
 
+            // 👇 PASTE THIS RIGHT HERE (underneath startLocationWatcher();) 👇
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    socket.emit('driver_location_update', {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude
+                    });
+                }, (err) => {
+                    socket.emit('driver_location_update', {
+                        lat: 51.3776,
+                        lng: -2.3571
+                    });
+                }, { timeout: 10000, enableHighAccuracy: true });
+            }
+            // 👆 ==================================================== 👆
+
             if (res.activeTrip) {
                 renderActiveTrip(res.activeTrip);
             }
             requestWalletUpdate();
+            // ── ADD IT RIGHT HERE ──
+            socket.emit("request_queue_sync");
+            // ───────────────────────
         });
 
         function startLocationWatcher() {
@@ -765,7 +795,7 @@
             }
         }
 
-        socket.on('driver_stand_hud', (data) => {
+       socket.on('driver_stand_hud', (data) => {
             if (activeTrip) {
                 const rankEl = document.getElementById('hdrQueueRank');
                 if (rankEl) {
@@ -1644,76 +1674,18 @@ function syncFeeToServer(arrMins, totalFee, enRouteMins, enRouteFee) {
         </script>
         
 <script>
-    // Wall-clock time sync for background tab throttling prevention
-    let _wasDisconnected = false;
-        if (typeof socket !== "undefined") {
-            socket.on("disconnect", () => { _wasDisconnected = true; });
-        }
-
-        document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "visible") {
-                if (typeof socket !== "undefined") {
-                    if (!socket.connected) {
-                        console.log("🔌 Reconnecting socket after wake...");
-                        socket.connect();
-                        _wasDisconnected = true;
-                    }
-                    // ONLY sync if connection actually dropped during sleep
-                    if (_wasDisconnected) {
-                        const savedDriver = localStorage.getItem("driverId") || sessionStorage.getItem("driverId");
-                        if (savedDriver) {
-                            socket.emit("driver_wakeup_sync", { driverId: savedDriver });
-                        }
-                        _wasDisconnected = false;
-                    }
-                }
+    // Bulletproof background tab wall-clock timer sync
+    window._wallClockTimerActive = true;
+    setInterval(() => {
+        if (!window._wallClockTimerActive) return;
+        // If there is an active job in ARRIVED status, re-evaluate grace time using real Date.now()
+        if (window.activeJob && (window.activeJob.status === "ARRIVED" || window.activeJob.status === "Arrived")) {
+            if (typeof updateArrivedTimer === "function") {
+                updateArrivedTimer();
             }
-        });
-</script>
-
-        <script>
-            // Bulletproof background tab wall-clock timer sync
-            window._wallClockTimerActive = true;
-            setInterval(() => {
-                if (!window._wallClockTimerActive) return;
-                // If there is an active job in ARRIVED status, re-evaluate grace time using real Date.now()
-                if (window.activeJob && (window.activeJob.status === "ARRIVED" || window.activeJob.status === "Arrived")) {
-                    if (typeof updateArrivedTimer === "function") {
-                        updateArrivedTimer();
-                    }
-                }
-            }, 1000);
-        </script>
-        
-
-<script>
-    // Absolute wall-clock sync for grace timer across background tab switches
-    let _wasDisconnected = false;
-        if (typeof socket !== "undefined") {
-            socket.on("disconnect", () => { _wasDisconnected = true; });
         }
-
-        document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "visible") {
-                if (typeof socket !== "undefined") {
-                    if (!socket.connected) {
-                        console.log("🔌 Reconnecting socket after wake...");
-                        socket.connect();
-                        _wasDisconnected = true;
-                    }
-                    // ONLY sync if connection actually dropped during sleep
-                    if (_wasDisconnected) {
-                        const savedDriver = localStorage.getItem("driverId") || sessionStorage.getItem("driverId");
-                        if (savedDriver) {
-                            socket.emit("driver_wakeup_sync", { driverId: savedDriver });
-                        }
-                        _wasDisconnected = false;
-                    }
-                }
-            }
-        });
+    }, 1000);
 </script>
-
 
 <script>
   // Google Maps style Screen Wake Lock to prevent browser screen sleep
@@ -1747,39 +1719,38 @@ function syncFeeToServer(arrMins, totalFee, enRouteMins, enRouteFee) {
   requestDriverWakeLock();
 </script>
 
+<script>
+    // Bulletproof wake-up socket reconnect & pending job sync (Global window scoped to prevent duplicates)
+    if (typeof window._wasDisconnected === 'undefined') {
+        window._wasDisconnected = false;
+    }
 
-    <script>
-        // Bulletproof wake-up socket reconnect & pending job sync
-        let _wasDisconnected = false;
-        if (typeof socket !== "undefined") {
-            socket.on("disconnect", () => { _wasDisconnected = true; });
+    if (typeof socket !== "undefined") {
+        socket.on("disconnect", () => { 
+            window._wasDisconnected = true; 
+        });
+    }
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+            if (typeof socket !== "undefined") {
+                if (!socket.connected) {
+                    console.log("🔌 Reconnecting socket after wake...");
+                    socket.connect();
+                    window._wasDisconnected = true;
+                }
+                // ONLY sync if connection actually dropped during sleep
+                if (window._wasDisconnected) {
+                    const savedDriver = localStorage.getItem("driverId") || sessionStorage.getItem("driverId");
+                    if (savedDriver) {
+                        socket.emit("driver_wakeup_sync", { driverId: savedDriver });
+                    }
+                    window._wasDisconnected = false;
+                }
+            }
         }
-
-        document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "visible") {
-                if (typeof socket !== "undefined") {
-                    if (!socket.connected) {
-                        console.log("🔌 Reconnecting socket after wake...");
-                        socket.connect();
-                        _wasDisconnected = true;
-                    }
-                    // ONLY sync if connection actually dropped during sleep
-                    if (_wasDisconnected) {
-                        const savedDriver = localStorage.getItem("driverId") || sessionStorage.getItem("driverId");
-                        if (savedDriver) {
-                            socket.emit("driver_wakeup_sync", { driverId: savedDriver });
-                        }
-                        _wasDisconnected = false;
-                    }
-                }
-            }
-        });
-                    }
-                }
-            }
-        });
-    </script>
-    
+    });
+</script>
 
     <script>
         // Listen for full state sync updates upon wake-up
@@ -1824,36 +1795,5 @@ if (navigator.geolocation) {
 }
 </script>
 
-<script>
-// Smart 5-Plot Multi-Zone GPS Matcher
-if (navigator.geolocation) {
-    navigator.geolocation.watchPosition(position => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        const plots = [
-            { name: "City Centre", lat: 51.381, lng: -2.359 },
-            { name: "Station", lat: 51.378, lng: -2.353 },
-            { name: "Larkhall", lat: 51.400, lng: -2.335 },
-            { name: "Oldfield Park", lat: 51.380, lng: -2.375 },
-            { name: "Weston", lat: 51.393, lng: -2.395 }
-        ];
-        let closest = "Outside Plot / Village";
-        let minDistance = 999999;
-        if (lat >= 51.35 && lat <= 51.43 && lng >= -2.43 && lng <= -2.30) {
-            plots.forEach(p => {
-                const dist = Math.sqrt(Math.pow(lat - p.lat, 2) + Math.pow(lng - p.lng, 2));
-                if (dist < minDistance) { minDistance = dist; closest = p.name; }
-            });
-        } else {
-            closest = "Outside Plot / Village (Live GPS)";
-        }
-        window.myCurrentPlot = closest;
-        const pNameEl = document.getElementById("curPlotNameTxt");
-        if (pNameEl) pNameEl.textContent = closest;
-        const areaEl = document.getElementById("current-area") || document.getElementById("location-display");
-        if (areaEl) areaEl.innerText = closest;
-    }, err => console.error(err), { enableHighAccuracy: true });
-}
-</script>
 </body>
 </html>
