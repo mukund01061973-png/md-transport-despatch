@@ -833,10 +833,10 @@ function getAllDrivers(tenantId = 'ALL') {
       ...d,
       isOnline: !!active,
       status: active ? active.status : 'Offline',
-      currentPlotName: active ? (active.currentPlotName || 'Larkhall') : 'Larkhall',
-      plotRank: active ? active.plotRank : 1,
-      lat: active ? active.lat : 51.3776,
-      lng: active ? active.lng : -2.3571
+      currentPlotName: active ? (active.currentPlotName || 'Unassigned') : 'Unassigned',
+      plotRank: active ? active.plotRank : null,
+      lat: active ? active.lat : null, // Changed from hardcoded Larkhall to null
+      lng: active ? active.lng : null  // Changed from hardcoded Larkhall to null
     };
   });
 }
